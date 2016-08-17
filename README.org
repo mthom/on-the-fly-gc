@@ -1,0 +1,16 @@
+#+TITLE:         On-the-fly Concurrent Mark Sweep GC
+#+AUTHOR:        Mark Thom
+#+EMAIL:         markjordanthom@gmail.com
+
+* Concurrent mark sweep garbage collection.
+
+On-the-fly GC is a concurrent mark-sweep garbage collector intended
+for accurate garbage collection of language runtimes written in C++
+1x.  It implements the sliding views technique described in the paper
+"An on-the-fly mark and sweep garbage collector based on sliding
+views", which is available at
+
+http://grothoff.org/christian/teaching/2007/4705/ms-sliding-views.pdf
+
+A goal of on-the-fly is to deliver extremely low mutator pause times,
+on the order of tens of microseconds, independently of heap size.
