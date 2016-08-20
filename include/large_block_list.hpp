@@ -6,7 +6,7 @@
 namespace otf_gc
 {
   using namespace impl_details;
-  
+
   struct block_cursor
   {
     std::ptrdiff_t size_d, split_d, prev_d, next_d, log_ptr_d, header_d;
@@ -28,7 +28,7 @@ namespace otf_gc
       , log_ptr_d(next_d + sizeof(void*))
       , header_d(log_ptr_d + sizeof(size_t) + log_ptr_size * num_log_ptrs)
     {}
-    
+
     inline std::ptrdiff_t start() const
     {
       return size_d;
@@ -73,12 +73,12 @@ namespace otf_gc
     {
       header_d = num_log_ptrs() * log_ptr_size + log_ptr_d + sizeof(size_t);
     }
-    
+
     inline log_ptr_t* log_ptr(size_t i)
     {
       return reinterpret_cast<log_ptr_t*>(log_ptr_d + sizeof(size_t) + i * log_ptr_size);
     }
-    
+
     inline bool null_block() const
     {
       return size_d == 0;
@@ -93,7 +93,7 @@ namespace otf_gc
     }
 
     block_cursor& operator=(std::ptrdiff_t) = delete;
-    
+
     inline block_cursor& operator=(void* blk)
     {
       size_d = reinterpret_cast<std::ptrdiff_t>(blk);
@@ -107,11 +107,11 @@ namespace otf_gc
 
       return *this;
     }
-    
+
     inline void unlink(void*& head, void*& tail)
     {
       block_cursor prev_c(*prev()), next_c(*next());
-      
+
       if(tail == reinterpret_cast<void*>(start()))
 	tail = *prev();
 
@@ -119,7 +119,7 @@ namespace otf_gc
 	*prev_c.next() = reinterpret_cast<void*>(next_c.start());
 	*prev() = nullptr;
       }
-      
+
       if(head == reinterpret_cast<void*>(start()))
 	head = *next();
 
@@ -137,15 +137,18 @@ namespace otf_gc
     void* tail;
 
     inline void split(block_cursor& blk_c, size_t sz)
-    {      
-      size_t& blk_sz  = blk_c.size();
-      size_t& blk_spl = blk_c.split();
+    {
+      using namespace impl_details;
+      
+      size_t blk_sz  = blk_c.size();
+      size_t blk_spl = blk_c.split() & split_mask;
+      size_t blk_spl_key = (blk_c.split() & split_switch_mask) >> split_switch_bits;
 
       assert(sz >= 10);
       assert(blk_sz >= sz);
-      
+
       void* next = *blk_c.next();
-      
+
       if(blk_sz > sz) {
 	if(tail == reinterpret_cast<void*>(blk_c.start()))
 	  tail = reinterpret_cast<void*>(blk_c.start() + (1ULL << (blk_sz - 1)));
@@ -154,13 +157,13 @@ namespace otf_gc
 	  block_cursor next_c(next);
 	  *next_c.prev() = reinterpret_cast<void*>(blk_c.start() + (1ULL << (blk_sz - 1)));
 	}
-      }	
-      
+      }
+
       for(size_t i = blk_sz - 1; i >= sz; --i) {
 	block_cursor new_blk_c(blk_c.start() + (1ULL << i));
 
 	new_blk_c.write(i,
-			blk_spl + blk_sz - i,
+			(blk_spl + blk_sz - i) | (((blk_spl_key << 1) | 1ULL) << split_bits),
 			i == sz
 			? reinterpret_cast<void*>(blk_c.start())
 			: reinterpret_cast<void*>(blk_c.start() + (1ULL << (i - 1))),
@@ -168,15 +171,15 @@ namespace otf_gc
 
 	new_blk_c.num_log_ptrs() = 0;
 	new_blk_c.recalculate();
-	
-	new(new_blk_c.header()) impl_details::header_t(0);
-	
+
+	new(new_blk_c.header()) header_t(zeroed_header);
+
 	next = reinterpret_cast<void*>(new_blk_c.start());
-      }      
-      
-      blk_spl = blk_spl + blk_sz - sz;
+      }
+
+      blk_c.split() = (blk_spl + blk_sz - sz) | ((blk_spl_key << 1) << split_bits);
       *blk_c.next() = next;
-      blk_sz = sz;
+      blk_c.size()  = sz;
 
       blk_c.unlink(head, tail);
     }
@@ -190,16 +193,16 @@ namespace otf_gc
     ~large_block_list()
     {
       block_cursor blk_c(head);
-      
+
       while(!blk_c.null_block()) {
 	blk_c.recalculate();
-	  
+
 	for(size_t i = 0; i < blk_c.num_log_ptrs(); ++i)
 	  blk_c.log_ptr(i)->~log_ptr_t();
-	
+
 	blk_c.header()->~header_t();
 	blk_c = *blk_c.next();
-      }    
+      }
     }
 
     inline bool empty() const
@@ -217,10 +220,10 @@ namespace otf_gc
       if(head) {
 	block_cursor blk_c(head);
 	head = *blk_c.next();
-	
-	*blk_c.next() = nullptr;	
+
+	*blk_c.next() = nullptr;
 	blk_c = head;
-	
+
 	if(head)
 	  *blk_c.prev() = nullptr;
 	else
@@ -262,14 +265,14 @@ namespace otf_gc
 
       block_cursor blk_c(blk), tail_c(tail);
       blk_c.write(sz, split, tail, nullptr);
-      
+
       if(tail)
-	*tail_c.next() = blk;	
+	*tail_c.next() = blk;
       else {
 	assert(!head);
 	head = blk;
       }
-      
+
       tail = blk;
     }
 
@@ -287,7 +290,7 @@ namespace otf_gc
 	assert(!tail);
 	tail = blk;
       }
-      
+
       head = blk;
     }
 
@@ -315,19 +318,19 @@ namespace otf_gc
       block_cursor blk_c(head);
 
       size_t d = 0;
-      
+
       while(!blk_c.null_block()) {
 	if(blk_c.size() >= sz) {
 	  split(blk_c, sz);
 	  return reinterpret_cast<void*>(blk_c.start());
 	}
-	
+
 	if(++d == impl_details::search_depth)
-	  break;	
-	
+	  break;
+
 	blk_c = *blk_c.next();
       }
-      
+
       return nullptr;
     }
 

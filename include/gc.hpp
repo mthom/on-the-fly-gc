@@ -460,9 +460,13 @@ namespace otf_gc
 	{
 	  Policy::destroy(h, blk_c.header());
 
-	  while(blk_c.split() > 0)
+	  while((blk_c.split() & split_mask) > 0)
 	  {
-	    block_cursor buddy_c(blk_c.start() ^ (1ULL << blk_c.size()));
+	    bool switch_bit = (blk_c.split() >> split_bits) & 1ULL;
+	    
+	    block_cursor buddy_c(switch_bit ? blk_c.start() - (1ULL << blk_c.size())
+				            : blk_c.start() + (1ULL << blk_c.size()));
+	    
 	    buddy_c.recalculate();
 	    
 	    if(buddy_c.size() == blk_c.size()) {
@@ -474,7 +478,7 @@ namespace otf_gc
 
 		Policy::destroy(h, buddy_c.header());
 
-		if(blk_c.start() > buddy_c.start())
+		if(blk_c.start() > buddy_c.start())		  
 		  std::swap(blk_c, buddy_c);
 		
 		for(size_t i = 0; i < buddy_c.num_log_ptrs(); ++i)
@@ -482,7 +486,8 @@ namespace otf_gc
 		
 		buddy_c.header()->~header_t();
 
-		--blk_c.split(); 
+		blk_c.split() = ((blk_c.split() & split_mask) - 1)
+		              | (((blk_c.split() & split_switch_mask) >> 1) & split_switch_mask);
 		++blk_c.size();
 	      } else {
 		break;

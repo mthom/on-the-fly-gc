@@ -22,16 +22,12 @@ namespace otf_gc
     sz |= sz >> 4;
     sz |= sz >> 8;
     sz |= sz >> 16;
-    sz++;
-
-    size_t index = 0;
-
-    while((sz & 1) == 0) {
-      ++index;
-      sz >>= 1;
-    }
-
-    return index;
+    
+    sz -= (sz >> 1) & 0x5555555555555555ULL;
+    sz = (sz & 0x3333333333333333ULL) + ((sz >> 2) & 0x3333333333333333ULL);
+    sz = (sz + (sz >> 4)) & 0x0f0f0f0f0f0f0f0fULL;
+    
+    return (sz * 0x0101010101010101ULL) >> 56;
   }
 
   inline impl_details::underlying_header_t

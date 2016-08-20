@@ -28,6 +28,10 @@ namespace otf_gc
     static constexpr size_t segment_size = 64; // size of a segment in bytes.
     static constexpr uint64_t small_block_metadata_size = header_size + log_ptr_size;
     static constexpr uint64_t small_block_size_limit    = 6;
+    static constexpr uint64_t split_bits                = 32;
+    static constexpr uint64_t split_mask                = (1ULL << split_bits) - 1;
+    static constexpr uint64_t split_switch_bits         = 32;
+    static constexpr uint64_t split_switch_mask         = ((1ULL << split_switch_bits) - 1) << split_bits;    
     static constexpr uint64_t large_block_metadata_size =
      2*sizeof(size_t) + 2*sizeof(void*) + header_size + sizeof(size_t);
     static constexpr uint64_t large_obj_min_bits  = 10;
