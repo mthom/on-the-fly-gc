@@ -65,7 +65,7 @@ namespace otf_gc
     inline operator T*() {
       return data;
     }
-
+    
     inline operator void*() {
       return reinterpret_cast<void*>(data);
     }

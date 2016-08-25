@@ -487,7 +487,7 @@ namespace otf_gc
 		buddy_c.header()->~header_t();
 
 		blk_c.split() = ((blk_c.split() & split_mask) - 1)
-		              | (((blk_c.split() & split_switch_mask) >> 1) & split_switch_mask);
+		              | (((blk_c.split() & split_switch_mask) >> 1ULL) & split_switch_mask);
 		++blk_c.size();
 	      } else {
 		break;

@@ -162,8 +162,10 @@ namespace otf_gc
       for(size_t i = blk_sz - 1; i >= sz; --i) {
 	block_cursor new_blk_c(blk_c.start() + (1ULL << i));
 
+	blk_spl_key <<= 1;
+	
 	new_blk_c.write(i,
-			(blk_spl + blk_sz - i) | (((blk_spl_key << 1) | 1ULL) << split_bits),
+			(blk_spl + blk_sz - i) | ((blk_spl_key | 1ULL) << split_bits),
 			i == sz
 			? reinterpret_cast<void*>(blk_c.start())
 			: reinterpret_cast<void*>(blk_c.start() + (1ULL << (i - 1))),
@@ -177,7 +179,7 @@ namespace otf_gc
 	next = reinterpret_cast<void*>(new_blk_c.start());
       }
 
-      blk_c.split() = (blk_spl + blk_sz - sz) | ((blk_spl_key << 1) << split_bits);
+      blk_c.split() = (blk_spl + blk_sz - sz) | (blk_spl_key << split_bits);
       *blk_c.next() = next;
       blk_c.size()  = sz;
 
@@ -321,7 +323,7 @@ namespace otf_gc
 
       while(!blk_c.null_block()) {
 	if(blk_c.size() >= sz) {
-	  split(blk_c, sz);
+	  split(blk_c, sz);	  	  
 	  return reinterpret_cast<void*>(blk_c.start());
 	}
 
