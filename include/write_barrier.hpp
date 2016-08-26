@@ -60,8 +60,8 @@ namespace otf_gc
     otf_write_barrier(Ts&&... items) : data(std::forward<Ts>(items)...)
     {}
 
-    otf_write_barrier(T* data_) : data(data_) {}
-
+    otf_write_barrier(T* data_ = nullptr) : data(data_) {}
+    
     inline operator T*() {
       return data;
     }

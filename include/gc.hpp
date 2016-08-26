@@ -172,18 +172,9 @@ namespace otf_gc
 	  parent.shook.fetch_add(1, std::memory_order_relaxed);
 	}
       }
-
+      
       ~registered_mutator()
       {
-	{
-	  std::lock_guard<std::mutex> lk(parent.reg_mut);
-
-	  parent.active.fetch_sub(!inactive, std::memory_order_relaxed);
-
-	  if(!inactive && current_phase == parent.gc_phase.load(std::memory_order_relaxed))
-	    parent.shook.fetch_sub(1, std::memory_order_relaxed);
-	}
-
 	parent.buffer_set.push_front(buffer);
 	
 	for(size_t i = 0; i < impl_details::small_size_classes; ++i) {
@@ -209,6 +200,15 @@ namespace otf_gc
 	}
 
 	allocation_dump.atomic_vacate_and_append(parent.allocation_dump);
+
+	{
+	  std::lock_guard<std::mutex> lk(parent.reg_mut);
+
+	  parent.active.fetch_sub(!inactive, std::memory_order_relaxed);
+
+	  if(!inactive && current_phase == parent.gc_phase.load(std::memory_order_relaxed))
+	    parent.shook.fetch_sub(1, std::memory_order_relaxed);
+	}	
       }
     };
   private:
