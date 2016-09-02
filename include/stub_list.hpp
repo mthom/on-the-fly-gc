@@ -142,10 +142,14 @@ namespace otf_gc
       return head;
     }
 
+    inline stub* front_ptr() {
+      return head;
+    }
+    
     inline stub* back() {
       return tail;
-    }
-
+    }    
+    
     inline void pop_front()
     {
       assert(head != nullptr);
@@ -162,6 +166,11 @@ namespace otf_gc
       st->next = nullptr;
     }
 
+    inline void node_pop_front()
+    {
+      pop_front();
+    }
+    
     inline void pop_back()
     {
       assert(tail != nullptr);

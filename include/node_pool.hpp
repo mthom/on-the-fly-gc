@@ -1,4 +1,5 @@
 #ifndef NODE_POOL_HPP_INCLUDED
+#define NODE_POOL_HPP_INCLUDED
 
 #include <cstdlib>
 
@@ -25,23 +26,25 @@ namespace otf_gc
     
     void* get()
     {
+      static constexpr size_t sz =
+	impl_details::pool_chunk_size * sizeof(typename List::node_type) + sizeof(list_node<void*>);
+      
       if(pool.empty())
-      {
-	if(!chunk || offset == impl_details::pool_chunk_size * sizeof(typename List::node_type))
+      {		
+	if(!chunk || offset == sz)	                       
 	{
-	  chunk = aligned_alloc(alignof(typename List::node_type),
-				impl_details::pool_chunk_size * sizeof(typename List::node_type));
-	  offset = 0;
+	  chunk = aligned_alloc(alignof(list_node<void*>), sz);
+	  offset = sizeof(list_node<void*>);
 
-	  allocation_dump.push_front(chunk);
+	  allocation_dump.node_push_front(reinterpret_cast<list_node<void*>*>(chunk));
 	}
 
-	auto node = reinterpret_cast<size_t>(chunk) + offset;
+	size_t node = reinterpret_cast<size_t>(chunk) + offset;
 	offset += sizeof(typename List::node_type);
 	return reinterpret_cast<void*>(node);
       } else {
-	auto node = pool.front();
-	pool.pop_front();
+	auto node = pool.front_ptr();
+	pool.node_pop_front();
 	return reinterpret_cast<void*>(node);
       }
     }

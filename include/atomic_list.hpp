@@ -2,6 +2,9 @@
 #define ATOMIC_LIST_HPP_INCLUDED
 
 #include <atomic>
+#include <cassert>
+#include <initializer_list>
+#include <utility>
 
 namespace otf_gc
 {
@@ -10,6 +13,9 @@ namespace otf_gc
   {
     T data;
     list_node<T>* next;
+
+    // static void* operator new(std::size_t);
+    // static void operator delete(void*, std::size_t);
   };
 
   template <typename T>
@@ -57,6 +63,8 @@ namespace otf_gc
     list_node<T>* head;
     list_node<T>* tail;    
   public:
+    using node_type = list_node<T>;
+    
     list() noexcept : head(nullptr), tail(nullptr) {}
     list(list_node<T>* head_) noexcept : head(head_), tail(head_) {}     
     list(list_node<T>* head_, list_node<T>* tail_) noexcept : head(head_), tail(tail_) {}
@@ -83,7 +91,7 @@ namespace otf_gc
     inline void reset()
     {
       head = tail = nullptr;
-    }
+    }    
     
     void pop_front()
     {
@@ -96,16 +104,46 @@ namespace otf_gc
       delete old_head;
     }
 
+    void node_pop_front()
+    {
+      head = head->next;
+
+      if(head == nullptr)
+	tail = nullptr;
+    }
+    
     T& front()
     {
       return head->data;
+    }
+    
+    list_node<T>* front_ptr()
+    {
+      return head;
     }
 
     bool empty() const
     {
       return head == nullptr;
     }
+    
+    void push_front(list_node<T>* node)
+    {
+      assert(node);
+      
+      if(head == nullptr) {
+	head = node;
+	tail = head;
+      } else {
+	node->next = head;
 
+	if(tail == nullptr)
+	  tail = node;
+	  
+	head = node;
+      }
+    }
+    
     void push_front(const T& data)
     {
       if(head == nullptr) {
@@ -114,6 +152,19 @@ namespace otf_gc
       } else {
 	head = new list_node<T>{data, head};
       }
+    }
+
+    template <class Q = T>
+    std::enable_if_t<std::is_same<Q, void*>::value, void>
+    node_push_front(list_node<Q>* chunk)
+    {
+      chunk->data = reinterpret_cast<void*>(chunk);
+      chunk->next = head;
+
+      if(tail == nullptr)
+	tail = chunk;
+
+      head = chunk;
     }
 
     void push_back(const T& data)
@@ -214,7 +265,7 @@ namespace otf_gc
 					std::memory_order_relaxed,
 					std::memory_order_relaxed));
     }
-
+    
     list_node<T>* front()
     {
       return head.load(std::memory_order_acquire);
