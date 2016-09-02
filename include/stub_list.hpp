@@ -4,6 +4,8 @@
 #include <atomic>
 #include <cassert>
 
+#include "node_pool.hpp"
+
 namespace otf_gc
 {
   struct stub {
@@ -16,6 +18,9 @@ namespace otf_gc
     stub(void* start_, size_t size_)
       : start(start_), size(size_), next(nullptr), prev(nullptr)
     {}
+
+    inline static void* operator new(size_t);
+    inline static void operator delete(void*, size_t);
   };
 
   class stub_list
@@ -24,6 +29,8 @@ namespace otf_gc
     stub* head;
     stub* tail;
   public:
+    using node_type = stub;
+
     stub_list(stub* head_ = nullptr, stub* tail_ = nullptr)
       : head(head_)
       , tail(tail_)
@@ -31,6 +38,7 @@ namespace otf_gc
 
     ~stub_list()
     {
+      /*
       stub* next = head;
 
       while(next) {
@@ -38,14 +46,15 @@ namespace otf_gc
 	delete next;
 	next = nnext;
       }
-    }    
-    
+      */
+    }
+
     inline stub_list& operator=(stub_list&& sl)
     {
       head = sl.head;
       tail = sl.tail;
-      
-      sl.head = sl.tail = nullptr;      
+      sl.head = sl.tail = nullptr;
+
       return *this;
     }
 
@@ -55,7 +64,7 @@ namespace otf_gc
 
       if(tail) {
 	tail->next = sl->head;
-	      
+
 	if(sl->head)
 	  sl->head->prev = tail;
       } else {
@@ -80,16 +89,16 @@ namespace otf_gc
 	if(atomic_sl) {
 	  copy_sl->append(atomic_sl);
 	  atomic_sl->head = atomic_sl->tail = nullptr;
-	  delete atomic_sl;	  
+	  delete atomic_sl;
 	}
 
 	copy_sl = sl.exchange(copy_sl, std::memory_order_relaxed);
-	
+
 	if(copy_sl) {
 	  atomic_sl = sl.exchange(nullptr, std::memory_order_relaxed);
 	} else {
 	  break;
-	}	
+	}
       }
     }
 
@@ -107,12 +116,12 @@ namespace otf_gc
     inline void push_front(stub* st)
     {
       assert(st != nullptr);
-      st->next = head;      
+      st->next = head;
       if(head)
 	head->prev = st;
       else
 	tail = st;
-      
+
       head = st;
       st->prev = nullptr;
     }
@@ -141,14 +150,14 @@ namespace otf_gc
     {
       assert(head != nullptr);
       assert(head->prev == nullptr);
-      
+
       stub* st = head;
-      
+
       if(head->next)
 	head->next->prev = nullptr;
       else
 	tail = nullptr;
-      
+
       head = head->next;
       st->next = nullptr;
     }
@@ -157,13 +166,14 @@ namespace otf_gc
     {
       assert(tail != nullptr);
       assert(tail->next == nullptr);
+
       stub* st = tail;
-      
+
       if(tail->prev)
 	tail->prev->next = nullptr;
       else
 	head = nullptr;
-      
+
       tail = tail->prev;
       st->prev = nullptr;
     }
@@ -173,6 +183,22 @@ namespace otf_gc
       return head == nullptr;
     }
   };
+
+  static node_pool<stub_list>& stub_list_pool()
+  {
+    static thread_local node_pool<stub_list> pool;
+    return pool;
+  }
+
+  void* stub::operator new(size_t)
+  {
+    return stub_list_pool().get();
+  }
+
+  void stub::operator delete(void* ptr, size_t)
+  {
+    stub_list_pool().put(ptr);
+  }
 }
 
 #endif

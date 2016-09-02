@@ -120,6 +120,11 @@ namespace otf_gc
     {
       roots_.reset();
     }
+
+    ~marker()
+    {
+      roots.clear();
+    }
     
     inline void mark(const color& ep)
     {

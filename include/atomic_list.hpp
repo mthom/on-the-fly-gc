@@ -65,7 +65,7 @@ namespace otf_gc
       for(const T& t : lst)
 	push_back(t);
     }
-
+    
     inline void* head_ptr() {
       return reinterpret_cast<void*>(head);
     }

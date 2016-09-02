@@ -37,6 +37,7 @@ namespace otf_gc
     static constexpr uint64_t large_obj_min_bits  = 10;
     static constexpr uint64_t large_obj_threshold = 1 << (large_obj_min_bits - 1);
     static constexpr size_t mark_tick_frequency = 100;
+    static constexpr size_t pool_chunk_size = 512;
     static constexpr size_t small_size_classes = 7;
     static constexpr size_t tick_frequency = 50;
   }

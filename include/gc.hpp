@@ -199,6 +199,7 @@ namespace otf_gc
 	  delete lul;
 	}
 
+	allocation_dump.append(stub_list_pool().reset_allocation_dump());
 	allocation_dump.atomic_vacate_and_append(parent.allocation_dump);
 
 	{
@@ -233,8 +234,8 @@ namespace otf_gc
     }
   public:
     ~gc()
-    {
-      while(active.load(std::memory_order_acquire) > 0);
+    {      
+      while(active.load(std::memory_order_relaxed) > 0);
 
       for(size_t i = 0; i < impl_details::small_size_classes; ++i)
 	delete small_free_lists[i].exchange(nullptr, std::memory_order_relaxed);
@@ -242,7 +243,7 @@ namespace otf_gc
       delete large_free_list.exchange(nullptr, std::memory_order_relaxed);
 
       for(size_t i = 0; i < impl_details::small_size_classes; ++i)
-	delete small_used_lists[i].exchange(nullptr, std::memory_order_relaxed);
+       	delete small_used_lists[i].exchange(nullptr, std::memory_order_relaxed);
 
       delete large_used_list.exchange(nullptr, std::memory_order_relaxed);
 
@@ -254,7 +255,15 @@ namespace otf_gc
       }
 
       root_set.exchange(nullptr, std::memory_order_relaxed).clear();
-      buffer_set.clear();
+
+      list<list<void*>> non_atomic_buffer_set(buffer_set.vacate());
+      
+      while(!non_atomic_buffer_set.empty()) {
+      	list<void*> buf(non_atomic_buffer_set.front());
+      	non_atomic_buffer_set.pop_front();
+
+      	buf.clear();	
+      }
     }
 
     static void initialize()
@@ -375,7 +384,13 @@ namespace otf_gc
       	      {
       		if(++ticks % tick_frequency == 0) {
       		  remaining_free->atomic_vacate_and_append(small_free_lists[i]);
-      		  if(!running.load(std::memory_order_relaxed)) return;
+      		  if(!running.load(std::memory_order_relaxed)) {
+		    delete remaining_free;
+		    delete remaining_used;
+		    delete processed_used;
+
+		    return;
+		  }
       		}
 
       		h = header(reinterpret_cast<void*>(p + log_ptr_size));
@@ -398,7 +413,13 @@ namespace otf_gc
       	      {
       		if(++ticks % tick_frequency == 0) {
       		  remaining_free->atomic_vacate_and_append(small_free_lists[i]);
-      		  if(!running.load(std::memory_order_relaxed)) return;
+      		  if(!running.load(std::memory_order_relaxed)) {
+		    delete remaining_free;
+		    delete processed_used;
+		    delete remaining_used;
+
+		    return;
+		  }
       		}
 
       		h = header(reinterpret_cast<void*>(p + log_ptr_size));
@@ -506,7 +527,11 @@ namespace otf_gc
 
 	if(++ticks % tick_frequency == 0) {
 	  processed_large_free->atomic_vacate_and_append(large_free_list);
-	  if(!running.load(std::memory_order_relaxed)) return;
+	  if(!running.load(std::memory_order_relaxed)) {
+	    delete processed_large_free;
+	    delete processed_large_used;
+	    return;
+	  }
 	}
       }
 
