@@ -117,14 +117,7 @@ namespace otf_gc
   public:
     marker(list<void*>&& roots_, std::atomic<bool>& running_)
       : roots(std::move(roots_)), running(running_)
-    {
-      roots_.reset();
-    }
-
-    ~marker()
-    {
-      roots.clear();
-    }
+    {}
     
     inline void mark(const color& ep)
     {

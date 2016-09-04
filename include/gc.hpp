@@ -199,17 +199,18 @@ namespace otf_gc
 	  delete lul;
 	}
 
+	allocation_dump.append(list_pool<void*>().reset_allocation_dump());
+	allocation_dump.append(list_pool<list<void*>>().reset_allocation_dump());
 	allocation_dump.append(stub_list_pool().reset_allocation_dump());
+	
 	allocation_dump.atomic_vacate_and_append(parent.allocation_dump);
 
-	{
-	  std::lock_guard<std::mutex> lk(parent.reg_mut);
+	std::lock_guard<std::mutex> lk(parent.reg_mut);
 
-	  parent.active.fetch_sub(!inactive, std::memory_order_relaxed);
-
-	  if(!inactive && current_phase == parent.gc_phase.load(std::memory_order_relaxed))
-	    parent.shook.fetch_sub(1, std::memory_order_relaxed);
-	}	
+	parent.active.fetch_sub(!inactive, std::memory_order_relaxed);
+	
+	if(!inactive && current_phase == parent.gc_phase.load(std::memory_order_relaxed))
+	  parent.shook.fetch_sub(1, std::memory_order_relaxed);
       }
     };
   private:
@@ -250,8 +251,9 @@ namespace otf_gc
       list<void*> records = allocation_dump.exchange(nullptr, std::memory_order_relaxed);
 
       while(!records.empty()) {
-	free(records.front());
+	void* record = records.front();
 	records.pop_front();
+	free(record);
       }
 
       root_set.exchange(nullptr, std::memory_order_relaxed).clear();

@@ -14,10 +14,10 @@ namespace otf_gc
     T data;
     list_node<T>* next;
 
-    // static void* operator new(std::size_t);
-    // static void operator delete(void*, std::size_t);
+    static void* operator new(std::size_t);
+    static void operator delete(void*, std::size_t);
   };
-
+  
   template <typename T>
   struct list_node_iterator
   {
@@ -106,6 +106,8 @@ namespace otf_gc
 
     void node_pop_front()
     {
+      assert(head);
+      
       head = head->next;
 
       if(head == nullptr)
@@ -126,32 +128,26 @@ namespace otf_gc
     {
       return head == nullptr;
     }
-    
+
     void push_front(list_node<T>* node)
     {
       assert(node);
-      
-      if(head == nullptr) {
-	head = node;
-	tail = head;
-      } else {
-	node->next = head;
 
-	if(tail == nullptr)
-	  tail = node;
-	  
+      node->next = head;
+
+      if(head == nullptr) {
+	head = tail = node;
+      } else {
 	head = node;
       }
     }
     
     void push_front(const T& data)
     {
-      if(head == nullptr) {
-	head = new list_node<T>{data, head};
+      head = new list_node<T>{data, head};
+      
+      if(tail == nullptr)
 	tail = head;
-      } else {
-	head = new list_node<T>{data, head};
-      }
     }
 
     template <class Q = T>
@@ -173,7 +169,7 @@ namespace otf_gc
 	head = new list_node<T>{data, head};
 	tail = head;
       } else {
-	tail->next = new list_node<T>{data, tail->next};
+	tail->next = new list_node<T>{data, nullptr};
 	tail = tail->next;
       }
     }
@@ -291,5 +287,11 @@ namespace otf_gc
       }      
     }
   };
+  
+  template <typename>
+  class node_pool;
+
+  template <typename T>
+  node_pool<list<T>>& list_pool();
 }
 #endif

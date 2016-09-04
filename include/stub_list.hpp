@@ -125,7 +125,7 @@ namespace otf_gc
       head = st;
       st->prev = nullptr;
     }
-
+    
     inline void push_back(stub* st)
     {
       assert(st != nullptr);
