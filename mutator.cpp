@@ -39,11 +39,10 @@ namespace otf_gc
 
   inline bool mutator::transfer_small_blocks_from_collector(size_t power)
   {
-    stub_list* stubs = gc::collector->small_free_lists[power-3].exchange(nullptr, std::memory_order_relaxed);
+    stub_list stubs = gc::collector->small_free_lists[power-3].exchange(nullptr, std::memory_order_relaxed);
     
-    if(stubs)
-    {
-      fixed_managers[power-3].append(stubs);
+    if(stubs) {
+      fixed_managers[power-3].append(std::move(stubs));
       return true;
     }
 
@@ -52,9 +51,11 @@ namespace otf_gc
 
   inline bool mutator::transfer_large_blocks_from_collector()
   {
-    large_block_list* blocks = gc::collector->large_free_list.exchange(nullptr, std::memory_order_relaxed);
+    large_block_list blocks = gc::collector->large_free_list.exchange(nullptr, std::memory_order_relaxed);
+    
     if(blocks) {
-      variable_manager.append(blocks);
+      variable_manager.append(std::move(blocks));
+      
       return true;
     }
 
@@ -115,24 +116,14 @@ namespace otf_gc
     return reinterpret_cast<void*>(blk_c.start());
   }
 
-  std::unique_ptr<stub_list> mutator::vacate_small_used_list(size_t i)
+  stub_list mutator::vacate_small_used_list(size_t i)
   {
-    std::unique_ptr<stub_list> result(std::make_unique<stub_list>());
-
-    result->append(fixed_managers[i].used_list.release());
-    fixed_managers[i].used_list = std::make_unique<stub_list>();
-
-    return result;
+    return fixed_managers[i].release_used_list();
   }
 
-  std::unique_ptr<large_block_list> mutator::vacate_large_used_list()
+  large_block_list mutator::vacate_large_used_list()
   {
-    std::unique_ptr<large_block_list> result(std::make_unique<large_block_list>());
-
-    result->append(variable_manager.used_list.release());
-    variable_manager.used_list = std::make_unique<large_block_list>();
-
-    return result;
+    return variable_manager.release_used_list();
   }
 
   void* mutator::allocate(int raw_sz, impl_details::underlying_header_t desc, size_t num_log_ptrs)

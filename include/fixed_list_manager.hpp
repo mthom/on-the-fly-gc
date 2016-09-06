@@ -18,25 +18,27 @@ namespace otf_gc
     const size_t obj_size;
     size_t log_multiplier;
 
-    std::unique_ptr<stub_list> free_list;
+    stub_list free_list;
   public:
-    std::unique_ptr<stub_list> used_list;
+    stub_list used_list;
 
     fixed_list_manager(size_t size_)
       : alloc{nullptr}
       , offset{0}
       , obj_size{size_}
       , log_multiplier{3}
-      , free_list(std::make_unique<stub_list>())
-      , used_list(std::make_unique<stub_list>())
     {}
 
-    inline stub_list* release_free_list() {
-      return free_list.release();
+    inline stub_list release_free_list() {
+      auto result = free_list;
+      free_list.reset();
+      return result;
     }
 
-    inline stub_list* release_used_list() {
-      return used_list.release();
+    inline stub_list release_used_list() {
+      auto result = used_list;
+      used_list.reset();
+      return result;
     }
 
     // sz here is the size in bytes.
@@ -46,14 +48,14 @@ namespace otf_gc
       stub* st = new stub(blk, sz);
 
       if(alloc)
-	free_list->push_back(st);
+	free_list.push_back(st);
       else
 	alloc = st;
     }
 
-    inline void append(stub_list* sl)
+    inline void append(stub_list&& sl)
     {
-      free_list->append(sl);
+      free_list.append(std::move(sl));
     }
 
     inline void* get_block()
@@ -71,17 +73,17 @@ namespace otf_gc
 	offset += (1ULL << obj_size);
       } else {
 	assert(offset == alloc->size);
-	alloc = free_list->front();
+	alloc = free_list.front();
 
 	if(alloc) {
-	  free_list->pop_front();
+	  free_list.pop_front();
 	  ptr = alloc->start;
 	  offset = (1 << obj_size);
 	}
       }
 
       if(ptr)
-	used_list->push_back(new stub(ptr, 1 << obj_size));
+	used_list.push_back(new stub(ptr, 1 << obj_size));
 
       return ptr;
     }
@@ -99,7 +101,7 @@ namespace otf_gc
       offset = 1 << obj_size;
 
       if(alloc->start)
-	used_list->push_back(new stub(alloc->start, 1ULL << obj_size));
+	used_list.push_back(new stub(alloc->start, 1ULL << obj_size));
 
       return alloc->start;
     }

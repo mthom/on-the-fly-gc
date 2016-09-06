@@ -31,66 +31,49 @@ namespace otf_gc
   public:
     using node_type = stub;
 
-    stub_list(stub* head_ = nullptr, stub* tail_ = nullptr)
+    stub_list(stub* head_ = nullptr, stub* tail_ = nullptr) noexcept
       : head(head_)
       , tail(tail_)
     {}
 
-    ~stub_list()
+    inline void append(stub_list&& sl)
     {
-      /*
-      stub* next = head;
-
-      while(next) {
-	stub* nnext = next->next;
-	delete next;
-	next = nnext;
-      }
-      */
-    }
-
-    inline stub_list& operator=(stub_list&& sl)
-    {
-      head = sl.head;
-      tail = sl.tail;
-      sl.head = sl.tail = nullptr;
-
-      return *this;
-    }
-
-    inline void append(stub_list* sl)
-    {
-      assert(sl != nullptr);
-
       if(tail) {
-	tail->next = sl->head;
+	tail->next = sl.head;
 
-	if(sl->head)
-	  sl->head->prev = tail;
+	if(sl.head)
+	  sl.head->prev = tail;
       } else {
-	assert(head == nullptr);
-	head = sl->head;
+	head = sl.head;
       }
 
-      tail = sl->tail;
+      tail = sl.tail;
+
+      sl.head = sl.tail = nullptr;
     }
 
-    inline void atomic_vacate_and_append(std::atomic<stub_list*>& sl)
+    inline void reset()
+    {
+      head = tail = nullptr;
+    }
+
+    inline operator bool() const {
+      return !empty();
+    }
+    
+    inline void atomic_vacate_and_append(std::atomic<stub_list>& sl)
     {
       if(head == nullptr)
 	return;
 
-      stub_list* copy_sl   = new stub_list(head, tail);
+      stub_list copy_sl(head, tail);
       head = tail = nullptr;
-      stub_list* atomic_sl = sl.exchange(nullptr, std::memory_order_relaxed);
+      stub_list atomic_sl = sl.exchange(nullptr, std::memory_order_relaxed);
 
       while(true)
       {
-	if(atomic_sl) {
-	  copy_sl->append(atomic_sl);
-	  atomic_sl->head = atomic_sl->tail = nullptr;
-	  delete atomic_sl;
-	}
+	if(atomic_sl)
+	  copy_sl.append(std::move(atomic_sl));
 
 	copy_sl = sl.exchange(copy_sl, std::memory_order_relaxed);
 
@@ -163,7 +146,7 @@ namespace otf_gc
 	tail = nullptr;
 
       head = head->next;
-      st->next = nullptr;
+      st->next = nullptr;      
     }
 
     inline void node_pop_front()

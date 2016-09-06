@@ -2,7 +2,6 @@
 #define MUTATOR_HPP_INCLUDED
 
 #include <array>
-#include <memory>
 
 #include "atomic_list.hpp"
 #include "color.hpp"
@@ -43,8 +42,8 @@ namespace otf_gc
 
     void* allocate(int, impl_details::underlying_header_t, size_t);
 
-    std::unique_ptr<stub_list> vacate_small_used_list(size_t);
-    std::unique_ptr<large_block_list> vacate_large_used_list();
+    stub_list vacate_small_used_list(size_t);
+    large_block_list vacate_large_used_list();
   };
 }
 #endif

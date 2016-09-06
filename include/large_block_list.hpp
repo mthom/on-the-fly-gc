@@ -1,6 +1,9 @@
 #ifndef LARGE_BLOCK_LIST_HPP_INCLUDED
 #define LARGE_BLOCK_LIST_HPP_INCLUDED
 
+#include <atomic>
+#include <cassert>
+
 #include "impl_details.hpp"
 
 namespace otf_gc
@@ -187,12 +190,16 @@ namespace otf_gc
     }
 
   public:
-    large_block_list(void* head_ = nullptr, void* tail_ = nullptr)
+    large_block_list(void* head_ = nullptr, void* tail_ = nullptr) noexcept
       : head(head_)
       , tail(tail_)
     {}
 
-    ~large_block_list()
+    inline operator bool() const {
+      return !empty();
+    }
+    
+    void clear()
     {
       block_cursor blk_c(head);
 
@@ -201,7 +208,7 @@ namespace otf_gc
 
 	for(size_t i = 0; i < blk_c.num_log_ptrs(); ++i)
 	  blk_c.log_ptr(i)->~log_ptr_t();
-
+	
 	blk_c.header()->~header_t();
 	blk_c = *blk_c.next();
       }
@@ -217,6 +224,11 @@ namespace otf_gc
       return head;
     }
 
+    inline void reset()
+    {
+      head = tail = nullptr;
+    }
+    
     inline void pop_front()
     {
       if(head) {
@@ -296,23 +308,23 @@ namespace otf_gc
       head = blk;
     }
 
-    inline void append(large_block_list* blk)
+    inline void append(large_block_list&& blk)
     {
-      assert(blk != nullptr);
-
       if(head) {
-	block_cursor blk_c(blk->head);
+	block_cursor blk_c(blk.head);
 	block_cursor tail_c(tail);
 
-	if(blk->head) {
-	  *tail_c.next() = blk->head;
+	if(blk.head) {
+	  *tail_c.next() = blk.head;
 	  *blk_c.prev()  = tail;
 	}
       } else {
-	head = blk->head;
+	head = blk.head;
       }
 
-      tail = blk->tail;
+      tail = blk.tail;
+
+      blk.head = blk.tail = nullptr;
     }
 
     inline void* get_block(size_t sz)
@@ -336,28 +348,24 @@ namespace otf_gc
       return nullptr;
     }
 
-    inline void atomic_vacate_and_append(std::atomic<large_block_list*>& lbl)
+    inline void atomic_vacate_and_append(std::atomic<large_block_list>& lbl)
     {
       if(head == nullptr)
 	return;
 
-      large_block_list* copy_lbl   = new large_block_list(head, tail);
+      large_block_list copy_lbl(head, tail);
       head = tail = nullptr;
-      large_block_list* atomic_lbl = lbl.exchange(nullptr, std::memory_order_relaxed);
+      large_block_list atomic_lbl = lbl.exchange(nullptr, std::memory_order_relaxed);
 
       while(true)
       {
-	if(atomic_lbl) {
-	  copy_lbl->append(atomic_lbl);
-	  atomic_lbl->head = atomic_lbl->tail = nullptr;
-	  delete atomic_lbl;
-	}
+	if(!atomic_lbl.empty())
+	  copy_lbl.append(std::move(atomic_lbl));
 
 	copy_lbl = lbl.exchange(copy_lbl, std::memory_order_relaxed);
 
-	if(copy_lbl) {
+	if(!copy_lbl.empty()) {
 	  atomic_lbl = lbl.exchange(nullptr, std::memory_order_relaxed);
-	  assert(copy_lbl != atomic_lbl);
 	} else {
 	  break;
 	}

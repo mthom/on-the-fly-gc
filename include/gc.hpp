@@ -27,11 +27,11 @@ namespace otf_gc
   private:
     std::atomic<list<void*>> allocation_dump;
 
-    std::atomic<stub_list*> small_used_lists[impl_details::small_size_classes];
-    std::atomic<large_block_list*> large_used_list;
+    std::atomic<stub_list> small_used_lists[impl_details::small_size_classes];
+    std::atomic<large_block_list> large_used_list;
 
-    std::atomic<stub_list*> small_free_lists[impl_details::small_size_classes];
-    std::atomic<large_block_list*> large_free_list;
+    std::atomic<stub_list> small_free_lists[impl_details::small_size_classes];
+    std::atomic<large_block_list> large_free_list;
 
     std::atomic<bool> running;
     std::atomic<color> alloc_color;
@@ -57,13 +57,13 @@ namespace otf_gc
 	{
 	  shook.store(0, std::memory_order_release);
 	  phase p(gc_phase.load(std::memory_order_acquire));
-   	    
+
 	  if(p == phase(phase::phase_t::Second_h))
 	  {
 	    color prev_color(alloc_color.load(std::memory_order_acquire));
 	    alloc_color.store(prev_color.flip(), std::memory_order_release);
 	  }
-	  
+
 	  gc_phase.store(p.advance(), std::memory_order_release);
 
 	  return true;
@@ -109,7 +109,7 @@ namespace otf_gc
       inline phase mut_phase() {
 	return current_phase;
       }
-      
+
       inline void append_front_buffer(list<void*>&& buf) {
 	buffer = buf.append(std::move(buffer));
       }
@@ -128,11 +128,11 @@ namespace otf_gc
 	else
 	  return buffer.head_ptr();
       }
-      
+
       inline color mut_color() const {
 	return alloc_color;
       }
-      
+
       inline void set_root_callback(std::function<list<void*>()> root_callback_)
       {
 	root_callback = root_callback_;
@@ -149,17 +149,17 @@ namespace otf_gc
 
 	  if(current_phase == phase(phase::phase_t::Third_h)) {
 	    list<void*> roots = root_callback();
-	    
+
 	    roots.append(std::move(snooped));
 	    roots.atomic_vacate_and_append(parent.root_set);
-	    
-	    for(size_t i = 0; i < impl_details::small_size_classes; ++i)
-	      if(auto small_ul = vacate_small_used_list(i).release())
-		small_ul->atomic_vacate_and_append(parent.small_used_lists[i]);
 
-	    if(auto large_ul = vacate_large_used_list().release())
-	      large_ul->atomic_vacate_and_append(parent.large_used_list);
-	    
+	    for(size_t i = 0; i < impl_details::small_size_classes; ++i)
+	      if(auto small_ul = vacate_small_used_list(i))
+		small_ul.atomic_vacate_and_append(parent.small_used_lists[i]);
+
+	    if(auto large_ul = vacate_large_used_list())
+	      large_ul.atomic_vacate_and_append(parent.large_used_list);
+
 	    alloc_color = parent.alloc_color.load(std::memory_order_acquire);
 	  } else if(current_phase == phase(phase::phase_t::Fourth_h)) {
 	    parent.buffer_set.push_front(buffer);
@@ -172,43 +172,35 @@ namespace otf_gc
 	  parent.shook.fetch_add(1, std::memory_order_relaxed);
 	}
       }
-      
+
       ~registered_mutator()
       {
 	parent.buffer_set.push_front(buffer);
-	
+
 	for(size_t i = 0; i < impl_details::small_size_classes; ++i) {
-	  if(auto fl = fixed_managers[i].release_free_list()) {
-	    fl->atomic_vacate_and_append(parent.small_free_lists[i]);
-	    delete fl;
-	  }
+	  if(auto fl = fixed_managers[i].release_free_list())
+	    fl.atomic_vacate_and_append(parent.small_free_lists[i]);
 
-	  if(auto ul = fixed_managers[i].release_used_list()) {
-	    ul->atomic_vacate_and_append(parent.small_used_lists[i]);
-	    delete ul;
-	  }
+	  if(auto ul = fixed_managers[i].release_used_list())
+	    ul.atomic_vacate_and_append(parent.small_used_lists[i]);
 	}
 
-	if(auto lfl = variable_manager.release_free_list()) {
-	  lfl->atomic_vacate_and_append(parent.large_free_list);
-	  delete lfl;
-	}
+	if(auto lfl = variable_manager.release_free_list())
+	  lfl.atomic_vacate_and_append(parent.large_free_list);
 
-	if(auto lul = variable_manager.release_used_list()) {
-	  lul->atomic_vacate_and_append(parent.large_used_list);
-	  delete lul;
-	}
+	if(auto lul = variable_manager.release_used_list())
+	  lul.atomic_vacate_and_append(parent.large_used_list);
 
 	allocation_dump.append(list_pool<void*>().reset_allocation_dump());
 	allocation_dump.append(list_pool<list<void*>>().reset_allocation_dump());
 	allocation_dump.append(stub_list_pool().reset_allocation_dump());
-	
+
 	allocation_dump.atomic_vacate_and_append(parent.allocation_dump);
 
 	std::lock_guard<std::mutex> lk(parent.reg_mut);
 
 	parent.active.fetch_sub(!inactive, std::memory_order_relaxed);
-	
+
 	if(!inactive && current_phase == parent.gc_phase.load(std::memory_order_relaxed))
 	  parent.shook.fetch_sub(1, std::memory_order_relaxed);
       }
@@ -220,13 +212,7 @@ namespace otf_gc
       , running(false)
       , active(0)
       , shook(0)
-    {
-      for(auto& small_ul : small_used_lists)
-	small_ul.store(nullptr, std::memory_order_relaxed);
-
-      for(auto& small_fl : small_free_lists)
-	small_fl.store(nullptr, std::memory_order_relaxed);
-    }
+    {}
 
     impl_details::underlying_header_t header(void* p)
     {
@@ -235,18 +221,8 @@ namespace otf_gc
     }
   public:
     ~gc()
-    {      
+    {
       while(active.load(std::memory_order_relaxed) > 0);
-
-      for(size_t i = 0; i < impl_details::small_size_classes; ++i)
-	delete small_free_lists[i].exchange(nullptr, std::memory_order_relaxed);
-
-      delete large_free_list.exchange(nullptr, std::memory_order_relaxed);
-
-      for(size_t i = 0; i < impl_details::small_size_classes; ++i)
-       	delete small_used_lists[i].exchange(nullptr, std::memory_order_relaxed);
-
-      delete large_used_list.exchange(nullptr, std::memory_order_relaxed);
 
       list<void*> records = allocation_dump.exchange(nullptr, std::memory_order_relaxed);
 
@@ -259,12 +235,12 @@ namespace otf_gc
       root_set.exchange(nullptr, std::memory_order_relaxed).clear();
 
       list<list<void*>> non_atomic_buffer_set(buffer_set.vacate());
-      
+
       while(!non_atomic_buffer_set.empty()) {
       	list<void*> buf(non_atomic_buffer_set.front());
       	non_atomic_buffer_set.pop_front();
 
-      	buf.clear();	
+      	buf.clear();
       }
     }
 
@@ -303,24 +279,24 @@ namespace otf_gc
       {
 	list<void*> buf(lists.front());
 	lists.pop_front();
-	  
+
 	while(!buf.empty()) {
 	  void* root = buf.front();
 	  buf.pop_front();
-	    
+
 	  if(!root) continue;
-	    
+
 	  auto rp = reinterpret_cast<std::ptrdiff_t>(root);
-	  
+
 	  if(rp & 1ULL)
-	  {	  
+	  {
 	    rp = rp ^ 1ULL;
-		
+
 	    header_t* header_w = reinterpret_cast<header_t*>(rp - header_size);
 	    underlying_header_t header_c = header_w->load(std::memory_order_relaxed);
-	      
-	    size_t num_log_ptrs = Tracer::num_log_ptrs(header_c);	  
-	      
+
+	    size_t num_log_ptrs = Tracer::num_log_ptrs(header_c);
+
 	    for(std::size_t p = rp - header_size - num_log_ptrs * log_ptr_size;
 		p < rp - header_size;
 		p += log_ptr_size)
@@ -329,35 +305,35 @@ namespace otf_gc
 	}
       }
     }
-    
+
     template <class Policy>
     void sweep(color free_color)
     {
       using namespace impl_details;
-      
+
       static size_t ticks = 0;
-      
-      stub_list* remaining_free = new stub_list();
-      stub_list* processed_used = new stub_list();
-      stub_list* remaining_used = nullptr;
-      
+
+      stub_list remaining_free;
+      stub_list processed_used;
+      stub_list remaining_used;
+
       for(size_t i = 0; i < impl_details::small_size_classes; ++i)
       {
-      	remaining_used = small_used_lists[i].exchange(nullptr, std::memory_order_relaxed);	
-      
-      	while(remaining_used && !remaining_used->empty())
-      	{
-      	  stub* st = remaining_used->front();
-      	  remaining_used->pop_front();
+      	remaining_used = small_used_lists[i].exchange(nullptr, std::memory_order_relaxed);
 
-      	  while(!remaining_used->empty())
+      	while(remaining_used)
+      	{
+      	  stub* st = remaining_used.front();
+      	  remaining_used.pop_front();
+
+      	  while(remaining_used)
       	  {
-      	    stub* new_st = remaining_used->front();
+      	    stub* new_st = remaining_used.front();
       	    void* offset = reinterpret_cast<void*>(reinterpret_cast<std::ptrdiff_t>(st->start) + st->size);
 
       	    if(offset == new_st->start) {
       	      st->size += new_st->size;
-      	      remaining_used->pop_front();
+      	      remaining_used.pop_front();
       	      delete new_st;
       	    } else {
       	      break;
@@ -372,7 +348,8 @@ namespace otf_gc
       	    bool free_status = color(h & header_color_mask) == free_color;
 
       	    if(free_status) {
-      	      Policy::destroy(h, reinterpret_cast<header_t*>(p + log_ptr_size));	      
+      	      Policy::destroy(h, reinterpret_cast<header_t*>(p + log_ptr_size));
+
       	      reinterpret_cast<log_ptr_t*>(p)->~log_ptr_t();
       	      reinterpret_cast<header_t*>(p + log_ptr_size)->~header_t();
       	    }
@@ -385,12 +362,8 @@ namespace otf_gc
       		  p += (1ULL << (i+3)))
       	      {
       		if(++ticks % tick_frequency == 0) {
-      		  remaining_free->atomic_vacate_and_append(small_free_lists[i]);
+      		  remaining_free.atomic_vacate_and_append(small_free_lists[i]);
       		  if(!running.load(std::memory_order_relaxed)) {
-		    delete remaining_free;
-		    delete remaining_used;
-		    delete processed_used;
-
 		    return;
 		  }
       		}
@@ -400,6 +373,7 @@ namespace otf_gc
       		if(color(h & header_color_mask) == free_color)
       		{
       		  Policy::destroy(h, reinterpret_cast<header_t*>(p + log_ptr_size));
+		  
       		  reinterpret_cast<log_ptr_t*>(p)->~log_ptr_t();
       		  reinterpret_cast<header_t*>(p + log_ptr_size)->~header_t();
 
@@ -414,12 +388,8 @@ namespace otf_gc
       		  p += (1ULL << (i+3)))
       	      {
       		if(++ticks % tick_frequency == 0) {
-      		  remaining_free->atomic_vacate_and_append(small_free_lists[i]);
+      		  remaining_free.atomic_vacate_and_append(small_free_lists[i]);
       		  if(!running.load(std::memory_order_relaxed)) {
-		    delete remaining_free;
-		    delete processed_used;
-		    delete remaining_used;
-
 		    return;
 		  }
       		}
@@ -439,39 +409,31 @@ namespace otf_gc
       	      stub* new_stub = new stub(reinterpret_cast<void*>(p), st->size - coalesced);
       	      st->size = coalesced;
 
-      	      free_status ? remaining_free->push_front(st) : processed_used->push_front(st);
-      	      remaining_used->push_front(new_stub);
+      	      free_status ? remaining_free.push_front(st) : processed_used.push_front(st);
+      	      remaining_used.push_front(new_stub);
       	      break;
       	    } else {
       	      assert(p == reinterpret_cast<underlying_header_t>(st->start) + st->size - (1ULL << (i+3)));
-      	      free_status ? remaining_free->push_front(st) : processed_used->push_front(st);
+      	      free_status ? remaining_free.push_front(st) : processed_used.push_front(st);
       	    }
       	  }
       	}
 
-      	if(remaining_used)
-      	  delete remaining_used;
-      
-      	processed_used->atomic_vacate_and_append(small_used_lists[i]);
-      	remaining_free->atomic_vacate_and_append(small_free_lists[i]);
+      	processed_used.atomic_vacate_and_append(small_used_lists[i]);
+      	remaining_free.atomic_vacate_and_append(small_free_lists[i]);
       }
 
-      delete processed_used;	
-      delete remaining_free;
+      large_block_list remaining_large_used = large_used_list.exchange(nullptr, std::memory_order_relaxed);
 
-      large_block_list* remaining_large_used = large_used_list.exchange(nullptr, std::memory_order_relaxed);
+      large_block_list processed_large_free;
+      large_block_list processed_large_used;
 
-      if(!remaining_large_used) return;
-
-      large_block_list* processed_large_free = new large_block_list();
-      large_block_list* processed_large_used = new large_block_list();
-
-      while(!remaining_large_used->empty())
+      while(remaining_large_used)
       {
 	using namespace impl_details;
 
-	void* fr = remaining_large_used->front();
-	remaining_large_used->pop_front();
+	void* fr = remaining_large_used.front();
+	remaining_large_used.pop_front();
 
 	block_cursor blk_c(fr);
 	blk_c.recalculate();
@@ -486,27 +448,27 @@ namespace otf_gc
 	  while((blk_c.split() & split_mask) > 0)
 	  {
 	    bool switch_bit = (blk_c.split() >> split_bits) & 1ULL;
-	    
+
 	    block_cursor buddy_c(switch_bit ? blk_c.start() - (1ULL << blk_c.size())
 				            : blk_c.start() + (1ULL << blk_c.size()));
-	    
+
 	    buddy_c.recalculate();
-	    
+
 	    if(buddy_c.size() == blk_c.size()) {
 	      h = buddy_c.header()->load(std::memory_order_relaxed);
 
 	      if(color(h & header_color_mask) == free_color)
 	      {
-		buddy_c.unlink(remaining_large_used->front(), remaining_large_used->back());
+		buddy_c.unlink(remaining_large_used.front(), remaining_large_used.back());
 
 		Policy::destroy(h, buddy_c.header());
 
-		if(blk_c.start() > buddy_c.start())		  
+		if(blk_c.start() > buddy_c.start())
 		  std::swap(blk_c, buddy_c);
-		
+
 		for(size_t i = 0; i < buddy_c.num_log_ptrs(); ++i)
 		  buddy_c.log_ptr(i)->~log_ptr_t();
-		
+
 		buddy_c.header()->~header_t();
 
 		blk_c.split() = ((blk_c.split() & split_mask) - 1)
@@ -519,30 +481,24 @@ namespace otf_gc
 	      break;
 	    }
 	  }
-	  
-	  blk_c.header()->store(zeroed_header, std::memory_order_relaxed);	  
-	  	  
-	  processed_large_free->push_front(blk_c);
+
+	  blk_c.header()->store(zeroed_header, std::memory_order_relaxed);
+
+	  processed_large_free.push_front(blk_c);
 	} else {
-	  processed_large_used->push_front(blk_c);
+	  processed_large_used.push_front(blk_c);
 	}
 
 	if(++ticks % tick_frequency == 0) {
-	  processed_large_free->atomic_vacate_and_append(large_free_list);
+	  processed_large_free.atomic_vacate_and_append(large_free_list);
 	  if(!running.load(std::memory_order_relaxed)) {
-	    delete processed_large_free;
-	    delete processed_large_used;
 	    return;
 	  }
 	}
       }
 
-      processed_large_free->atomic_vacate_and_append(large_free_list);
-      processed_large_used->atomic_vacate_and_append(large_used_list);
-
-      delete processed_large_free;
-      delete remaining_large_used;
-      delete processed_large_used;
+      processed_large_free.atomic_vacate_and_append(large_free_list);
+      processed_large_used.atomic_vacate_and_append(large_used_list);
     }
 
     template <class Policy, class Tracer>
@@ -553,7 +509,7 @@ namespace otf_gc
       while(running.load(std::memory_order_relaxed))
       {
 	assert(shook.load(std::memory_order_acquire) <= active.load(std::memory_order_acquire));
-	
+
 	if(try_advance())
 	{
 	  phase::phase_t p = gc_phase.load(std::memory_order_acquire);
@@ -576,7 +532,7 @@ namespace otf_gc
 	  case phase::phase_t::Clearing:
 	    clear_buffers<Tracer>();
 	    break;
-	    
+
 	  default:
 	    break;
 	  }
