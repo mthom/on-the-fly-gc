@@ -266,9 +266,9 @@ namespace otf_gc
     template <class Policy>
     void destroy()
     {
-      destroy_objects<Policy>();
-      
       while(active.load(std::memory_order_relaxed) > 0);
+
+      destroy_objects<Policy>();      
       
       list<void*> records = allocation_dump.exchange(nullptr, std::memory_order_relaxed);
 
