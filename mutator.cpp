@@ -54,8 +54,7 @@ namespace otf_gc
     large_block_list blocks = gc::collector->large_free_list.exchange(nullptr, std::memory_order_relaxed);
     
     if(blocks) {
-      variable_manager.append(std::move(blocks));
-      
+      variable_manager.append(std::move(blocks));      
       return true;
     }
 
@@ -85,8 +84,8 @@ namespace otf_gc
   }
 
   void* mutator::allocate_large(size_t power,
-				impl_details::underlying_header_t desc,
-				size_t num_log_ptrs)
+						impl_details::underlying_header_t desc,
+						size_t num_log_ptrs)
   {
     block_cursor blk_c(variable_manager.get_block(power));
 
@@ -126,7 +125,9 @@ namespace otf_gc
     return variable_manager.release_used_list();
   }
 
-  void* mutator::allocate(int raw_sz, impl_details::underlying_header_t desc, size_t num_log_ptrs)
+  void* mutator::allocate(int raw_sz,
+					  impl_details::underlying_header_t desc,
+					  size_t num_log_ptrs)
   {
     using namespace impl_details;
     
@@ -140,5 +141,5 @@ namespace otf_gc
       
       return reinterpret_cast<void*>(reinterpret_cast<std::ptrdiff_t>(p) + preamble_sz);
     }
-  }
+  }    
 }
