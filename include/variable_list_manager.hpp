@@ -10,10 +10,8 @@ namespace otf_gc
   class variable_list_manager
   {
   private:
-    large_block_list free_list;
+    large_block_list free_list, used_list;
   public:
-    large_block_list used_list;
-
     inline large_block_list release_free_list()
     {
       auto result = free_list;

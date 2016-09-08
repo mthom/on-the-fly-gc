@@ -18,10 +18,8 @@ namespace otf_gc
     const size_t obj_size;
     size_t log_multiplier;
 
-    stub_list free_list;
+    stub_list free_list, used_list;
   public:
-    stub_list used_list;
-
     fixed_list_manager(size_t size_)
       : alloc{nullptr}
       , offset{0}
@@ -41,7 +39,6 @@ namespace otf_gc
       return result;
     }
 
-    // sz here is the size in bytes.
     inline void push_front(void* blk, size_t sz)
     {
       assert(blk != nullptr);
@@ -78,12 +75,12 @@ namespace otf_gc
 	if(alloc) {
 	  free_list.pop_front();
 	  ptr = alloc->start;
-	  offset = (1 << obj_size);
+	  offset = (1ULL << obj_size);
 	}
       }
 
       if(ptr)
-	used_list.push_back(new stub(ptr, 1 << obj_size));
+	used_list.push_back(new stub(ptr, 1ULL << obj_size));
 
       return ptr;
     }
@@ -98,12 +95,14 @@ namespace otf_gc
       if(obj_size + log_multiplier < impl_details::small_block_size_limit + obj_size)
 	++log_multiplier;
 
-      offset = 1 << obj_size;
+      offset = 1ULL << obj_size;
 
       if(alloc->start)
 	used_list.push_back(new stub(alloc->start, 1ULL << obj_size));
 
-      return alloc->start;
+      assert(alloc->start == blk);
+      
+      return blk;
     }
   };
 }

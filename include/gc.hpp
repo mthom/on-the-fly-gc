@@ -217,14 +217,14 @@ namespace otf_gc
       impl_details::header_t& h = *reinterpret_cast<impl_details::header_t*>(p);
       return h.load(std::memory_order_relaxed);
     }
-    
+
     template <class Policy>
     void destroy_objects()
     {
       using namespace impl_details;
-      
+
       stub_list remaining_used;
-      
+
       for(size_t i = 0; i < impl_details::small_size_classes; ++i)
       {
       	remaining_used = small_used_lists[i].exchange(nullptr, std::memory_order_relaxed);
@@ -232,15 +232,15 @@ namespace otf_gc
 	while(remaining_used) {
 	  stub* st = remaining_used.front();
 	  remaining_used.pop_front();
-	  	
+
 	  for(auto p = reinterpret_cast<std::uint64_t>(st->start);
 	      p < reinterpret_cast<std::uint64_t>(st->start) + st->size;
 	      p += (1ULL << (i+3)))
 	  {
 	    underlying_header_t h = header(reinterpret_cast<void*>(p + log_ptr_size));
-	    
+
 	    Policy::destroy(h, reinterpret_cast<header_t*>(p + log_ptr_size));
-	    
+
 	    reinterpret_cast<log_ptr_t*>(p)->~log_ptr_t();
 	    reinterpret_cast<header_t*>(p + log_ptr_size)->~header_t();
 	  }
@@ -258,7 +258,7 @@ namespace otf_gc
 
 	underlying_header_t h = blk_c.header()->load(std::memory_order_relaxed);
 
-	Policy::destroy(h, blk_c.header());	
+	Policy::destroy(h, blk_c.header());
       }
     }
 
@@ -268,8 +268,8 @@ namespace otf_gc
     {
       while(active.load(std::memory_order_relaxed) > 0);
 
-      destroy_objects<Policy>();      
-      
+      destroy_objects<Policy>();
+
       list<void*> records = allocation_dump.exchange(nullptr, std::memory_order_relaxed);
 
       while(!records.empty()) {
@@ -381,17 +381,17 @@ namespace otf_gc
       	  {
       	    underlying_header_t h = header(reinterpret_cast<void*>(p + log_ptr_size));
       	    bool free_status = color(h & header_color_mask) == free_color;
-	    
+
 	    if(ticks % tick_frequency == 0 && !running.load(std::memory_order_relaxed)) {
 	      processed_used.push_front(new stub(reinterpret_cast<void*>(p),
 						 reinterpret_cast<std::uint64_t>(st->start) + st->size - p));
-	      
+
 	      processed_used.atomic_vacate_and_append(small_used_lists[i]);
-	      remaining_used.atomic_vacate_and_append(small_used_lists[i]);	      
-	      
+	      remaining_used.atomic_vacate_and_append(small_used_lists[i]);
+
 	      return;
 	    }
-	    
+
       	    if(free_status) {
       	      Policy::destroy(h, reinterpret_cast<header_t*>(p + log_ptr_size));
 
@@ -407,7 +407,7 @@ namespace otf_gc
       		  p += (1ULL << (i+3)))
       	      {
       		if(++ticks % tick_frequency == 0) {
-      		  remaining_free.atomic_vacate_and_append(small_free_lists[i]);      		  
+      		  remaining_free.atomic_vacate_and_append(small_free_lists[i]);
       		}
 
       		h = header(reinterpret_cast<void*>(p + log_ptr_size));
@@ -415,7 +415,7 @@ namespace otf_gc
       		if(color(h & header_color_mask) == free_color)
       		{
       		  Policy::destroy(h, reinterpret_cast<header_t*>(p + log_ptr_size));
-		  
+
       		  reinterpret_cast<log_ptr_t*>(p)->~log_ptr_t();
       		  reinterpret_cast<header_t*>(p + log_ptr_size)->~header_t();
 
@@ -584,6 +584,13 @@ namespace otf_gc
 	  }
 	}
       }
+      
+      list<void*> result = list_pool<void*>().reset_allocation_dump();
+
+      result.append(list_pool<list<void*>>().reset_allocation_dump());
+      result.append(stub_list_pool().reset_allocation_dump());
+
+      result.atomic_vacate_and_append(allocation_dump);
     }
   };
 }
