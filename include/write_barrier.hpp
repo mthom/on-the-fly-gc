@@ -135,8 +135,6 @@ namespace otf_gc
 					std::memory_order success,
 					std::memory_order failure)
     {
-      T* old_expected = expected;
-
       this->prelude(parent, data);
       
       bool result = data.compare_exchange_strong(old_expected, desired, success, failure);
