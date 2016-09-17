@@ -86,7 +86,7 @@ namespace otf_gc
 	      auto lpp = lp->load();
 	    
 	      if(lpp) {
-		list<void*> buffer_list(reinterpret_cast<list_node<void*>*>(lpp));	      	      
+		list<void*> buffer_list(reinterpret_cast<typename list<void*>::node_type*>(lpp));	      	      
 		auto it = buffer_list.begin();
 		
 		if(it != buffer_list.end() && *it)

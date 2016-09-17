@@ -30,8 +30,8 @@ namespace otf_gc
     std::atomic<stub_list> small_used_lists[impl_details::small_size_classes];
     std::atomic<large_block_list> large_used_list;
 
-    std::atomic<stub_list> small_free_lists[impl_details::small_size_classes];
-    std::atomic<large_block_list> large_free_list;
+    atomic_list<stub_list> small_free_lists[impl_details::small_size_classes];
+    atomic_list<large_block_list> large_free_lists;
 
     std::atomic<bool> running;
     std::atomic<color> alloc_color;
@@ -179,18 +179,22 @@ namespace otf_gc
 
 	for(size_t i = 0; i < impl_details::small_size_classes; ++i) {
 	  if(auto fl = fixed_managers[i].release_free_list())
-	    fl.atomic_vacate_and_append(parent.small_free_lists[i]);
+	    parent.small_free_lists[i].push_front(fl);
 
 	  if(auto ul = fixed_managers[i].release_used_list())
 	    ul.atomic_vacate_and_append(parent.small_used_lists[i]);
 	}
 
 	if(auto lfl = variable_manager.release_free_list())
-	  lfl.atomic_vacate_and_append(parent.large_free_list);
+	  parent.large_free_lists.push_front(lfl);
 
 	if(auto lul = variable_manager.release_used_list())
 	  lul.atomic_vacate_and_append(parent.large_used_list);
 
+	allocation_dump.append(atomic_list_pool<list<void*>>().reset_allocation_dump());
+	allocation_dump.append(atomic_list_pool<large_block_list>().reset_allocation_dump());
+	allocation_dump.append(atomic_list_pool<stub_list>().reset_allocation_dump());
+	
 	allocation_dump.append(list_pool<void*>().reset_allocation_dump());
 	allocation_dump.append(list_pool<list<void*>>().reset_allocation_dump());
 	allocation_dump.append(stub_list_pool().reset_allocation_dump());
@@ -308,12 +312,9 @@ namespace otf_gc
     {
       using namespace impl_details;
 
-      list<list<void*>> lists(buffer_set.vacate());
-
-      while(!lists.empty())
+      while(!buffer_set.empty())
       {
-	list<void*> buf(lists.front());
-	lists.pop_front();
+	list<void*> buf(buffer_set.pop_front());
 
 	while(!buf.empty()) {
 	  void* root = buf.front();
@@ -407,7 +408,8 @@ namespace otf_gc
       		  p += (1ULL << (i+3)))
       	      {
       		if(++ticks % tick_frequency == 0) {
-      		  remaining_free.atomic_vacate_and_append(small_free_lists[i]);
+		  small_free_lists[i].push_front(remaining_free);
+		  remaining_free.reset();
       		}
 
       		h = header(reinterpret_cast<void*>(p + log_ptr_size));
@@ -430,7 +432,8 @@ namespace otf_gc
       		  p += (1ULL << (i+3)))
       	      {
       		if(++ticks % tick_frequency == 0) {
-      		  remaining_free.atomic_vacate_and_append(small_free_lists[i]);
+		  small_free_lists[i].push_front(remaining_free);
+		  remaining_free.reset();
       		}
 
       		h = header(reinterpret_cast<void*>(p + log_ptr_size));
@@ -459,7 +462,9 @@ namespace otf_gc
       	}
 
       	processed_used.atomic_vacate_and_append(small_used_lists[i]);
-      	remaining_free.atomic_vacate_and_append(small_free_lists[i]);
+
+	small_free_lists[i].push_front(remaining_free);
+	remaining_free.reset();
       }
 
       large_block_list remaining_large_used = large_used_list.exchange(nullptr, std::memory_order_relaxed);
@@ -485,7 +490,9 @@ namespace otf_gc
 
 	  remaining_large_used.atomic_vacate_and_append(large_used_list);
 	  processed_large_used.atomic_vacate_and_append(large_used_list);
-	  processed_large_free.atomic_vacate_and_append(large_free_list);
+
+	  large_free_lists.push_front(processed_large_free);
+	  processed_large_free.reset();
 
 	  return;
 	}
@@ -539,11 +546,14 @@ namespace otf_gc
 	}
 
 	if(++ticks % tick_frequency == 0) {
-	  processed_large_free.atomic_vacate_and_append(large_free_list);
+	  large_free_lists.push_front(processed_large_free);
+	  processed_large_free.reset();
 	}
       }
 
-      processed_large_free.atomic_vacate_and_append(large_free_list);
+      large_free_lists.push_front(processed_large_free);
+      processed_large_free.reset();
+      
       processed_large_used.atomic_vacate_and_append(large_used_list);
     }
 
@@ -588,6 +598,11 @@ namespace otf_gc
       list<void*> result = list_pool<void*>().reset_allocation_dump();
 
       result.append(list_pool<list<void*>>().reset_allocation_dump());
+      
+      result.append(atomic_list_pool<list<void*>>().reset_allocation_dump());
+      result.append(atomic_list_pool<large_block_list>().reset_allocation_dump());
+      result.append(atomic_list_pool<stub_list>().reset_allocation_dump());
+      
       result.append(stub_list_pool().reset_allocation_dump());
 
       result.atomic_vacate_and_append(allocation_dump);

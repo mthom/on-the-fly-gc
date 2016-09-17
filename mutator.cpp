@@ -39,7 +39,7 @@ namespace otf_gc
 
   inline bool mutator::transfer_small_blocks_from_collector(size_t power)
   {
-    stub_list stubs = gc::collector->small_free_lists[power-3].exchange(nullptr, std::memory_order_relaxed);
+    stub_list stubs = gc::collector->small_free_lists[power-3].pop_front();
     
     if(stubs) {
       fixed_managers[power-3].append(std::move(stubs));
@@ -51,7 +51,7 @@ namespace otf_gc
 
   inline bool mutator::transfer_large_blocks_from_collector()
   {
-    large_block_list blocks = gc::collector->large_free_list.exchange(nullptr, std::memory_order_relaxed);
+    large_block_list blocks = gc::collector->large_free_lists.pop_front();
     
     if(blocks) {
       variable_manager.append(std::move(blocks));      

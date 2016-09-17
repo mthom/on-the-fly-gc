@@ -9,65 +9,63 @@
 namespace otf_gc
 {
   template <typename T>
-  struct list_node
-  {
-    T data;
-    list_node<T>* next;
-
-    static void* operator new(std::size_t);
-    static void operator delete(void*, std::size_t);
-  };
-  
-  template <typename T>
-  struct list_node_iterator
-  {
-    list_node<T>* focus;
-
-    list_node_iterator operator++(int) const
-    {
-      return list_node_iterator { focus->next };
-    }
-      
-    list_node_iterator& operator++()
-    {
-      focus = focus->next;
-      return *this;
-    }
-
-    T operator*()
-    {
-      return focus->data;
-    }
-    
-    list_node_iterator& operator=(const list_node_iterator& it)
-    {
-      focus = it.focus;
-      return *this;
-    }
-
-    inline bool operator==(const list_node_iterator& it)
-    {
-      return focus == it.focus;
-    }
-
-    inline bool operator!=(const list_node_iterator& it)
-    {
-      return focus != it.focus;
-    }      
-  };
-  
-  template <typename T>
   class list
   {
   private:
-    list_node<T>* head;
-    list_node<T>* tail;    
+    struct list_node
+    {
+      T data;
+      list_node* next;
+
+      static void* operator new(std::size_t);
+      static void operator delete(void*, std::size_t);
+    };
+  
+    struct list_node_iterator
+    {
+      list_node* focus;
+
+      list_node_iterator operator++(int) const
+      {
+	return list_node_iterator { focus->next };
+      }
+      
+      list_node_iterator& operator++()
+      {
+	focus = focus->next;
+	return *this;
+      }
+
+      T operator*()
+      {
+	return focus->data;
+      }
+    
+      list_node_iterator& operator=(const list_node_iterator& it)
+      {
+	focus = it.focus;
+	return *this;
+      }
+
+      inline bool operator==(const list_node_iterator& it)
+      {
+	return focus == it.focus;
+      }
+
+      inline bool operator!=(const list_node_iterator& it)
+      {
+	return focus != it.focus;
+      }      
+    };
+      
+    list_node* head;
+    list_node* tail;    
   public:
-    using node_type = list_node<T>;
+    using node_type = list_node;
     
     list() noexcept : head(nullptr), tail(nullptr) {}
-    list(list_node<T>* head_) noexcept : head(head_), tail(head_) {}     
-    list(list_node<T>* head_, list_node<T>* tail_) noexcept : head(head_), tail(tail_) {}
+    list(list_node* head_) noexcept : head(head_), tail(head_) {}     
+    list(list_node* head_, list_node* tail_) noexcept : head(head_), tail(tail_) {}
     list(std::initializer_list<T> lst) : head(nullptr), tail(nullptr)
     {
       for(const T& t : lst)
@@ -78,12 +76,12 @@ namespace otf_gc
       return reinterpret_cast<void*>(head);
     }
     
-    inline list_node_iterator<T> begin() const
+    inline list_node_iterator begin() const
     {
       return { head };
     }
     
-    inline list_node_iterator<T> end() const
+    inline list_node_iterator end() const
     {
       return { nullptr };
     }
@@ -95,7 +93,7 @@ namespace otf_gc
     
     void pop_front()
     {
-      list_node<T>* old_head = head;
+      list_node* old_head = head;
       head = head->next;
 
       if(head == nullptr)
@@ -104,14 +102,17 @@ namespace otf_gc
       delete old_head;
     }
 
-    void node_pop_front()
+    list_node* node_pop_front()
     {
       assert(head);
-      
+
+      list_node* old_head = head;      
       head = head->next;
 
       if(head == nullptr)
 	tail = nullptr;
+
+      return old_head;
     }
     
     T& front()
@@ -119,7 +120,7 @@ namespace otf_gc
       return head->data;
     }
     
-    list_node<T>* front_ptr()
+    list_node* front_ptr()
     {
       return head;
     }
@@ -129,7 +130,7 @@ namespace otf_gc
       return head == nullptr;
     }
 
-    void push_front(list_node<T>* node)
+    void push_front(list_node* node)
     {
       assert(node);
 
@@ -144,7 +145,7 @@ namespace otf_gc
     
     void push_front(const T& data)
     {
-      head = new list_node<T>{data, head};
+      head = new list_node{data, head};
       
       if(tail == nullptr)
 	tail = head;
@@ -152,7 +153,7 @@ namespace otf_gc
 
     template <class Q = T>
     std::enable_if_t<std::is_same<Q, void*>::value, void>
-    node_push_front(list_node<Q>* chunk)
+    node_push_front(list_node* chunk)
     {
       chunk->data = reinterpret_cast<void*>(chunk);
       chunk->next = head;
@@ -166,10 +167,10 @@ namespace otf_gc
     void push_back(const T& data)
     {
       if(head == nullptr) {
-	head = new list_node<T>{data, head};
+	head = new list_node{data, head};
 	tail = head;
       } else {
-	tail->next = new list_node<T>{data, nullptr};
+	tail->next = new list_node{data, nullptr};
 	tail = tail->next;
       }
     }
@@ -233,65 +234,143 @@ namespace otf_gc
   class atomic_list
   {
   private:
-    friend class list<T>;
-    std::atomic<list_node<T>*> head;
-  
-  public:
-    atomic_list() : head(nullptr) {}
+    struct atomic_list_node;
 
-    atomic_list(atomic_list&& lst)
-      : head(lst.head.exchange(nullptr, std::memory_order_relaxed))
-    {}
-    
-    virtual ~atomic_list() {}
-    
-    inline list_node_iterator<T> begin() const {
-      return list_node_iterator<T> { head.load(std::memory_order_relaxed) };
-    }
-
-    inline list_node_iterator<T> end() const {
-      return list_node_iterator<T> { nullptr };
-    }
-    
-    void push_front(const T& data)
+    struct counted_node_ptr
     {
-      list_node<T>* new_head = new list_node<T>{data, nullptr};
-      while(!head.compare_exchange_weak(new_head->next,
-					new_head,
-					std::memory_order_relaxed,
+      int external_count;
+      atomic_list_node* ptr;
+    };
+
+    struct atomic_list_node
+    {
+      static_assert(std::is_trivially_copyable<T>::value, "needs trivially copyable type.");
+
+      T data;
+      std::atomic<int> internal_count;
+      counted_node_ptr next;
+
+      atomic_list_node(T const& data_)
+	: data(data_)
+	, internal_count(0)
+      {}
+
+      static void* operator new(std::size_t);
+      static void operator delete(void*, std::size_t);
+    };
+
+    std::atomic<counted_node_ptr> head;
+
+    void increase_head_count(counted_node_ptr& old_counter)
+    {
+      counted_node_ptr new_counter;
+
+      do
+	{
+	  new_counter = old_counter;
+	  ++new_counter.external_count;
+	} while(!head.compare_exchange_strong(old_counter,
+					      new_counter,
+					      std::memory_order_acquire,
+					      std::memory_order_relaxed));
+
+      old_counter.external_count = new_counter.external_count;
+    }
+
+  public:
+    using node_type = atomic_list_node;
+
+    atomic_list() : head(counted_node_ptr{1, nullptr}) {}
+  
+    void push_front(atomic_list_node* node)
+    {
+      counted_node_ptr new_node;
+    
+      new_node.ptr = node;
+      new_node.external_count = 1;
+      new_node.ptr->next = head.load(std::memory_order_relaxed);
+
+      while(!head.compare_exchange_weak(new_node.ptr->next,
+					new_node,
+					std::memory_order_release,
 					std::memory_order_relaxed));
     }
-    
-    list_node<T>* front()
+  
+    void push_front(const T& data)
     {
-      return head.load(std::memory_order_acquire);
+      counted_node_ptr new_node;
+    
+      new_node.ptr = new atomic_list_node(data);
+      new_node.external_count = 1;
+      new_node.ptr->next = head.load(std::memory_order_relaxed);
+
+      while(!head.compare_exchange_weak(new_node.ptr->next,
+					new_node,
+					std::memory_order_release,
+					std::memory_order_relaxed));
     }
 
-    list_node<T>* vacate()
+    T pop_front()
     {
-      return head.exchange(nullptr, std::memory_order_relaxed);
+      counted_node_ptr old_head = head.load(std::memory_order_relaxed);
+
+      while(true)
+	{
+	  increase_head_count(old_head);
+	  atomic_list_node* const ptr = old_head.ptr;
+
+	  if(!ptr)
+	    return T();
+
+	  if(head.compare_exchange_strong(old_head,
+					  ptr->next,
+					  std::memory_order_relaxed))
+	    {
+	      T res(ptr->data);
+	
+	      int const count_increase = old_head.external_count-2;
+
+	      if(ptr->internal_count.fetch_add(count_increase, std::memory_order_release) == count_increase)
+		{
+		  delete ptr;
+		}
+
+	      return res;
+	    } else if(ptr->internal_count.fetch_add(-1, std::memory_order_relaxed) == 1) {
+	    ptr->internal_count.load(std::memory_order_acquire);
+	    delete ptr;
+	  }	
+	}
     }
 
-    bool empty() const {
-      return !head.load(std::memory_order_relaxed);
-    }
-    
-    void clear()
+    atomic_list_node* node_pop_front()
     {
-      list_node<T>* next = head.exchange(nullptr, std::memory_order_relaxed);      
+      counted_node_ptr old_head = head.load(std::memory_order_relaxed);
+
+      while(true)
+	{            
+	  atomic_list_node* const ptr = old_head.ptr;
       
-      while(next) {
-	auto node = next->next;
-	delete next;
-	next = node;
-      }      
+	  if(!ptr)
+	    return nullptr;
+      
+	  if(head.compare_exchange_strong(old_head, ptr->next, std::memory_order_relaxed))      	
+	    return ptr;
+	}
+    }
+  
+    bool empty() const {
+      return !head.load(std::memory_order_relaxed).ptr;
     }
   };
-  
+
   template <typename>
   class node_pool;
 
   template <typename T>
   node_pool<list<T>>& list_pool();
+
+  template <typename T>
+  node_pool<atomic_list<T>>& atomic_list_pool();
 }
 #endif

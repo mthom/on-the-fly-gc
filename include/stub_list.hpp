@@ -149,9 +149,11 @@ namespace otf_gc
       st->next = nullptr;      
     }
 
-    inline void node_pop_front()
+    inline stub* node_pop_front()
     {
+      stub* fr = front();
       pop_front();
+      return fr;
     }
     
     inline void pop_back()

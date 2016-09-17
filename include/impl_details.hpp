@@ -21,11 +21,11 @@ namespace otf_gc
 
     static constexpr uint64_t header_tag_mask = ((1 << tag_bits) - 1) << color_bits;
     static constexpr uint64_t header_color_mask = 0x3;
-    static constexpr size_t header_size = sizeof(header_t);
-    static constexpr size_t log_ptr_size = sizeof(log_ptr_t);
-    static constexpr size_t log_ptr_offset = 2*sizeof(size_t) + 2*sizeof(void*);
-    static constexpr size_t search_depth = 64;
-    static constexpr size_t segment_size = 64; // size of a segment in bytes.
+    static constexpr std::size_t header_size = sizeof(header_t);
+    static constexpr std::size_t log_ptr_size = sizeof(log_ptr_t);
+    static constexpr std::size_t log_ptr_offset = 2*sizeof(std::size_t) + 2*sizeof(void*);
+    static constexpr std::size_t search_depth = 64;
+    static constexpr std::size_t segment_size = 64; // size of a segment in bytes.
     static constexpr uint64_t small_block_metadata_size = header_size + log_ptr_size;
     static constexpr uint64_t small_block_size_limit    = 6;
     static constexpr uint64_t split_bits                = 32;
@@ -33,13 +33,13 @@ namespace otf_gc
     static constexpr uint64_t split_switch_bits         = 32;
     static constexpr uint64_t split_switch_mask         = ((1ULL << split_switch_bits) - 1) << split_bits;    
     static constexpr uint64_t large_block_metadata_size =
-     2*sizeof(size_t) + 2*sizeof(void*) + header_size + sizeof(size_t);
+     2*sizeof(std::size_t) + 2*sizeof(void*) + header_size + sizeof(std::size_t);
     static constexpr uint64_t large_obj_min_bits  = 10;
     static constexpr uint64_t large_obj_threshold = 1 << (large_obj_min_bits - 1);
-    static constexpr size_t mark_tick_frequency = 100;
-    static constexpr size_t pool_chunk_size = 512;
-    static constexpr size_t small_size_classes = 7;
-    static constexpr size_t tick_frequency = 50;
+    static constexpr std::size_t mark_tick_frequency = 100;
+    static constexpr std::size_t pool_chunk_size = 512;
+    static constexpr std::size_t small_size_classes = 7;
+    static constexpr std::size_t tick_frequency = 50;
   }
 }
 

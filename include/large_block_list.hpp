@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <new>
 
 #include "impl_details.hpp"
 
@@ -14,22 +15,22 @@ namespace otf_gc
   {
     std::ptrdiff_t size_d, split_d, prev_d, next_d, log_ptr_d, header_d;
 
-    block_cursor(void* blk, size_t num_log_ptrs = 0)
+    block_cursor(void* blk, std::size_t num_log_ptrs = 0)
       : size_d(reinterpret_cast<std::ptrdiff_t>(blk))
-      , split_d(size_d + sizeof(size_t))
-      , prev_d(split_d + sizeof(size_t))
+      , split_d(size_d + sizeof(std::size_t))
+      , prev_d(split_d + sizeof(std::size_t))
       , next_d(prev_d + sizeof(void*))
       , log_ptr_d(next_d + sizeof(void*))
-      , header_d(log_ptr_d + sizeof(size_t) + log_ptr_size * num_log_ptrs)
+      , header_d(log_ptr_d + sizeof(std::size_t) + log_ptr_size * num_log_ptrs)
     {}
 
-    block_cursor(std::ptrdiff_t blk, size_t num_log_ptrs = 0)
+    block_cursor(std::ptrdiff_t blk, std::size_t num_log_ptrs = 0)
       : size_d(blk)
-      , split_d(blk + sizeof(size_t))
-      , prev_d(split_d + sizeof(size_t))
+      , split_d(blk + sizeof(std::size_t))
+      , prev_d(split_d + sizeof(std::size_t))
       , next_d(prev_d + sizeof(void*))
       , log_ptr_d(next_d + sizeof(void*))
-      , header_d(log_ptr_d + sizeof(size_t) + log_ptr_size * num_log_ptrs)
+      , header_d(log_ptr_d + sizeof(std::size_t) + log_ptr_size * num_log_ptrs)
     {}
 
     inline std::ptrdiff_t start() const
@@ -47,14 +48,14 @@ namespace otf_gc
       return reinterpret_cast<void**>(next_d);
     }
 
-    inline size_t& size()
+    inline std::size_t& size()
     {
-      return *reinterpret_cast<size_t*>(size_d);
+      return *reinterpret_cast<std::size_t*>(size_d);
     }
 
-    inline size_t& split()
+    inline std::size_t& split()
     {
-      return *reinterpret_cast<size_t*>(split_d);
+      return *reinterpret_cast<std::size_t*>(split_d);
     }
 
     inline std::ptrdiff_t data()
@@ -67,19 +68,19 @@ namespace otf_gc
       return reinterpret_cast<header_t*>(header_d);
     }
 
-    inline size_t& num_log_ptrs()
+    inline std::size_t& num_log_ptrs()
     {
-      return *reinterpret_cast<size_t*>(log_ptr_d);
+      return *reinterpret_cast<std::size_t*>(log_ptr_d);
     }
 
     inline void recalculate()
     {
-      header_d = num_log_ptrs() * log_ptr_size + log_ptr_d + sizeof(size_t);
+      header_d = num_log_ptrs() * log_ptr_size + log_ptr_d + sizeof(std::size_t);
     }
 
-    inline log_ptr_t* log_ptr(size_t i)
+    inline log_ptr_t* log_ptr(std::size_t i)
     {
-      return reinterpret_cast<log_ptr_t*>(log_ptr_d + sizeof(size_t) + i * log_ptr_size);
+      return reinterpret_cast<log_ptr_t*>(log_ptr_d + sizeof(std::size_t) + i * log_ptr_size);
     }
 
     inline bool null_block() const
@@ -87,7 +88,7 @@ namespace otf_gc
       return size_d == 0;
     }
 
-    inline void write(size_t sz, size_t spl, void* prev_, void* next_)
+    inline void write(std::size_t sz, std::size_t spl, void* prev_, void* next_)
     {
       size() = sz;
       split() = spl;
@@ -100,8 +101,8 @@ namespace otf_gc
     inline block_cursor& operator=(void* blk)
     {
       size_d = reinterpret_cast<std::ptrdiff_t>(blk);
-      split_d = size_d + sizeof(size_t);
-      prev_d = split_d + sizeof(size_t);
+      split_d = size_d + sizeof(std::size_t);
+      prev_d = split_d + sizeof(std::size_t);
       next_d = prev_d + sizeof(void*);
       log_ptr_d = next_d + sizeof(void*);
 
@@ -139,13 +140,13 @@ namespace otf_gc
     void* head;
     void* tail;
 
-    inline void split(block_cursor& blk_c, size_t sz)
+    inline void split(block_cursor& blk_c, std::size_t sz)
     {
       using namespace impl_details;
       
-      size_t blk_sz  = blk_c.size();
-      size_t blk_spl = blk_c.split() & split_mask;
-      size_t blk_spl_key = (blk_c.split() & split_switch_mask) >> split_switch_bits;
+      std::size_t blk_sz  = blk_c.size();
+      std::size_t blk_spl = blk_c.split() & split_mask;
+      std::size_t blk_spl_key = (blk_c.split() & split_switch_mask) >> split_switch_bits;
 
       assert(sz >= 10);
       assert(blk_sz >= sz);
@@ -162,7 +163,7 @@ namespace otf_gc
 	}
       }
 
-      for(size_t i = blk_sz - 1; i >= sz; --i) {
+      for(std::size_t i = blk_sz - 1; i >= sz; --i) {
 	block_cursor new_blk_c(blk_c.start() + (1ULL << i));
 
 	blk_spl_key <<= 1;
@@ -206,7 +207,7 @@ namespace otf_gc
       while(!blk_c.null_block()) {
 	blk_c.recalculate();
 
-	for(size_t i = 0; i < blk_c.num_log_ptrs(); ++i)
+	for(std::size_t i = 0; i < blk_c.num_log_ptrs(); ++i)
 	  blk_c.log_ptr(i)->~log_ptr_t();
 	
 	blk_c.header()->~header_t();
@@ -272,7 +273,7 @@ namespace otf_gc
       push_front(reinterpret_cast<void*>(blk.start()), blk.size(), blk.split());
     }
 
-    inline void push_back(void* blk, size_t sz, size_t split = 0)
+    inline void push_back(void* blk, std::size_t sz, std::size_t split = 0)
     {
       assert(blk != nullptr);
       assert(sz >= 10);
@@ -290,7 +291,7 @@ namespace otf_gc
       tail = blk;
     }
 
-    inline void push_front(void* blk, size_t sz, size_t split = 0)
+    inline void push_front(void* blk, std::size_t sz, std::size_t split = 0)
     {
       assert(blk != nullptr);
       assert(sz >= 10);
@@ -327,11 +328,11 @@ namespace otf_gc
       blk.head = blk.tail = nullptr;
     }
 
-    inline void* get_block(size_t sz)
+    inline void* get_block(std::size_t sz)
     {
       block_cursor blk_c(head);
 
-      size_t d = 0;
+      std::size_t d = 0;
 
       while(!blk_c.null_block()) {
 	if(blk_c.size() >= sz) {
