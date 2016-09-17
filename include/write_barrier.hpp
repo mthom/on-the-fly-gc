@@ -137,7 +137,7 @@ namespace otf_gc
     {
       this->prelude(parent, data);
       
-      bool result = data.compare_exchange_strong(old_expected, desired, success, failure);
+      bool result = data.compare_exchange_strong(expected, desired, success, failure);
       
       if(result && desired && Alloc()->snooping())
 	Alloc()->push_front_snooping(desired->derived_ptr());
