@@ -53,6 +53,11 @@ namespace otf_gc
     inline void append(stub_list&& sl)
     {
       free_list.append(std::move(sl));
+
+      if(!alloc) {
+	alloc = free_list.front();
+	free_list.pop_front();
+      }	
     }
 
     inline void* get_block()
@@ -88,8 +93,8 @@ namespace otf_gc
     inline void* get_new_block()
     {
       assert(!alloc);
-
       void* blk = aligned_alloc(alignof(impl_details::header_t), 1ULL << (obj_size + log_multiplier));
+      
       push_front(blk, 1ULL << (obj_size + log_multiplier));
 
       if(obj_size + log_multiplier < impl_details::small_block_size_limit + obj_size)

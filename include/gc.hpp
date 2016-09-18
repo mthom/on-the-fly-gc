@@ -1,12 +1,10 @@
 #ifndef GC_HPP_INCLUDED
 #define GC_HPP_INCLUDED
 
-#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
-#include <iterator>
 #include <memory>
 #include <mutex>
 #include <thread>
