@@ -46,13 +46,11 @@ namespace otf_gc
   template class list<void*>;
   
   template class atomic_list<list<void*>>;
-  template class atomic_list<large_block_list>;
   template class atomic_list<stub_list>;
 
   template node_pool<list<void*>>& list_pool<void*>();
   template node_pool<list<list<void*>>>& list_pool<list<void*>>();
 
   template node_pool<atomic_list<list<void*>>>& atomic_list_pool<list<void*>>();
-  template node_pool<atomic_list<large_block_list>>& atomic_list_pool<large_block_list>();
   template node_pool<atomic_list<stub_list>>& atomic_list_pool<stub_list>();
 }

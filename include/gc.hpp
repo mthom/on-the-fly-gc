@@ -186,7 +186,6 @@ namespace otf_gc
 	  lul.atomic_vacate_and_append(parent.large_used_list);
 
 	allocation_dump.append(atomic_list_pool<list<void*>>().reset_allocation_dump());
-	allocation_dump.append(atomic_list_pool<large_block_list>().reset_allocation_dump());
 	allocation_dump.append(atomic_list_pool<stub_list>().reset_allocation_dump());
 	
 	allocation_dump.append(list_pool<void*>().reset_allocation_dump());
@@ -549,7 +548,6 @@ namespace otf_gc
       result.append(list_pool<list<void*>>().reset_allocation_dump());
       
       result.append(atomic_list_pool<list<void*>>().reset_allocation_dump());
-      result.append(atomic_list_pool<large_block_list>().reset_allocation_dump());
       result.append(atomic_list_pool<stub_list>().reset_allocation_dump());
       
       result.append(stub_list_pool().reset_allocation_dump());
