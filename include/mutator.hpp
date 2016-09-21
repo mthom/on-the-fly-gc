@@ -20,7 +20,6 @@ namespace otf_gc
 
     inline impl_details::underlying_header_t create_header(impl_details::underlying_header_t);    
     inline bool transfer_small_blocks_from_collector(size_t);
-    inline bool transfer_large_blocks_from_collector();
     
     void* allocate_small(size_t, impl_details::underlying_header_t);
     void* allocate_large(size_t, impl_details::underlying_header_t, size_t);

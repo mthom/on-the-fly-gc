@@ -29,7 +29,6 @@ namespace otf_gc
     std::atomic<large_block_list> large_used_list;
 
     atomic_list<stub_list> small_free_lists[impl_details::small_size_classes];
-    atomic_list<large_block_list> large_free_lists;
 
     std::atomic<bool> running;
     std::atomic<color> alloc_color;
@@ -183,9 +182,6 @@ namespace otf_gc
 	    ul.atomic_vacate_and_append(parent.small_used_lists[i]);
 	}
 
-	if(auto lfl = variable_manager.release_free_list())
-	  parent.large_free_lists.push_front(lfl);
-
 	if(auto lul = variable_manager.release_used_list())
 	  lul.atomic_vacate_and_append(parent.large_used_list);
 
@@ -277,6 +273,14 @@ namespace otf_gc
       while(!records.empty()) {
 	void* record = records.front();
 	records.pop_front();
+	free(record);
+      }
+
+      large_block_list used_large_records = large_used_list.exchange(nullptr, std::memory_order_relaxed);
+      
+      while(!used_large_records.empty()) {
+	void* record = used_large_records.front();
+	used_large_records.pop_front();
 	free(record);
       }
     }
@@ -466,8 +470,6 @@ namespace otf_gc
       }
 
       large_block_list remaining_large_used = large_used_list.exchange(nullptr, std::memory_order_relaxed);
-
-      large_block_list processed_large_free;
       large_block_list processed_large_used;
 
       while(remaining_large_used)
@@ -489,68 +491,17 @@ namespace otf_gc
 	  remaining_large_used.atomic_vacate_and_append(large_used_list);
 	  processed_large_used.atomic_vacate_and_append(large_used_list);
 
-	  large_free_lists.push_front(processed_large_free);
-	  processed_large_free.reset();
-
 	  return;
 	}
 
 	if(free_status)
 	{
 	  Policy::destroy(h, blk_c.header());
-
-	  while((blk_c.split() & split_mask) > 0)
-	  {
-	    bool switch_bit = (blk_c.split() >> split_bits) & 1ULL;
-
-	    block_cursor buddy_c(switch_bit ? blk_c.start() - (1ULL << blk_c.size())
-				            : blk_c.start() + (1ULL << blk_c.size()));
-
-	    buddy_c.recalculate();
-
-	    if(buddy_c.size() == blk_c.size()) {
-	      h = buddy_c.header()->load(std::memory_order_relaxed);
-
-	      if(color(h & header_color_mask) == free_color)
-	      {
-		buddy_c.unlink(remaining_large_used.front(), remaining_large_used.back());
-
-		Policy::destroy(h, buddy_c.header());
-
-		if(blk_c.start() > buddy_c.start())
-		  std::swap(blk_c, buddy_c);
-
-		for(size_t i = 0; i < buddy_c.num_log_ptrs(); ++i)
-		  buddy_c.log_ptr(i)->~log_ptr_t();
-
-		buddy_c.header()->~header_t();
-
-		blk_c.split() = ((blk_c.split() & split_mask) - 1)
-		              | (((blk_c.split() & split_switch_mask) >> 1ULL) & split_switch_mask);
-		++blk_c.size();
-	      } else {
-		break;
-	      }
-	    } else {
-	      break;
-	    }
-	  }
-
-	  blk_c.header()->store(zeroed_header, std::memory_order_relaxed);
-
-	  processed_large_free.push_front(blk_c);
+	  free(reinterpret_cast<void*>(blk_c.start()));
 	} else {
 	  processed_large_used.push_front(blk_c);
 	}
-
-	if(++ticks % tick_frequency == 0) {
-	  large_free_lists.push_front(processed_large_free);
-	  processed_large_free.reset();
-	}
       }
-
-      large_free_lists.push_front(processed_large_free);
-      processed_large_free.reset();
       
       processed_large_used.atomic_vacate_and_append(large_used_list);
     }

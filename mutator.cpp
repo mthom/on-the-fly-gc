@@ -48,18 +48,6 @@ namespace otf_gc
     return false;
   }
 
-  inline bool mutator::transfer_large_blocks_from_collector()
-  {
-    large_block_list blocks = gc::collector->large_free_lists.pop_front();
-
-    if(blocks) {
-      variable_manager.append(std::move(blocks));
-      return true;
-    }
-
-    return false;
-  }
-
   void* mutator::allocate_small(size_t power, impl_details::underlying_header_t desc)
   {
     void* ptr = fixed_managers[power-3].get_block();
@@ -82,27 +70,15 @@ namespace otf_gc
     return ptr;
   }
 
-  void* mutator::allocate_large(size_t power,
+  void* mutator::allocate_large(size_t sz,
 				impl_details::underlying_header_t desc,
 				size_t num_log_ptrs)
   {
-    block_cursor blk_c(variable_manager.get_block(power));
+    void* blk = aligned_alloc(alignof(impl_details::header_t), sz);
+    variable_manager.push_front_used(blk);
 
-    if(blk_c.null_block()) {
-      if(transfer_large_blocks_from_collector())
-	blk_c = variable_manager.get_block(power);
-
-      if(blk_c.null_block()) {
-	blk_c = aligned_alloc(alignof(impl_details::header_t), 1 << power);
-	allocation_dump.push_front(reinterpret_cast<void*>(blk_c.start()));
-
-	blk_c.size() = power;
-	blk_c.split() = 0;
-
-	variable_manager.push_front_used(reinterpret_cast<void*>(blk_c.start()), power);
-      }
-    }
-
+    block_cursor blk_c(blk);
+    
     blk_c.num_log_ptrs() = num_log_ptrs;
     blk_c.recalculate();
 
@@ -111,7 +87,7 @@ namespace otf_gc
 
     new(blk_c.header()) impl_details::header_t(create_header(desc));
 
-    return reinterpret_cast<void*>(blk_c.start());
+    return blk;
   }
 
   stub_list mutator::vacate_small_used_list(size_t i)
@@ -136,7 +112,7 @@ namespace otf_gc
       return reinterpret_cast<void*>(reinterpret_cast<std::ptrdiff_t>(p) + small_block_metadata_size);
     } else {
       size_t preamble_sz = large_block_metadata_size + num_log_ptrs * log_ptr_size;
-      void *p = allocate_large(mutator::binary_log(raw_sz + preamble_sz), desc, num_log_ptrs);
+      void *p = allocate_large(preamble_sz + raw_sz, desc, num_log_ptrs);
 
       return reinterpret_cast<void*>(reinterpret_cast<std::ptrdiff_t>(p) + preamble_sz);
     }

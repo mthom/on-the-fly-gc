@@ -32,8 +32,7 @@ namespace otf_gc
     static constexpr uint64_t split_mask                = (1ULL << split_bits) - 1;
     static constexpr uint64_t split_switch_bits         = 32;
     static constexpr uint64_t split_switch_mask         = ((1ULL << split_switch_bits) - 1) << split_bits;    
-    static constexpr uint64_t large_block_metadata_size =
-     2*sizeof(std::size_t) + 2*sizeof(void*) + header_size + sizeof(std::size_t);
+    static constexpr uint64_t large_block_metadata_size = 2*sizeof(void*) + header_size + sizeof(std::size_t);
     static constexpr uint64_t large_obj_min_bits  = 10;
     static constexpr uint64_t large_obj_threshold = 1 << (large_obj_min_bits - 1);
     static constexpr std::size_t mark_tick_frequency = 64;
