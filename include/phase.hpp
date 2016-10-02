@@ -12,8 +12,7 @@ namespace otf_gc
       Third_h,
       Tracing,
       Fourth_h,
-      Sweep,
-      Clearing
+      Sweep      
     };
 
     phase_t p;
@@ -23,11 +22,11 @@ namespace otf_gc
     phase(phase_t p_) noexcept : p(p_) {}
   
     inline phase_t& advance() {
-      return p = phase_t((static_cast<int8_t>(p) + 1) % 7);
+      return p = phase_t((static_cast<int8_t>(p) + 1) % 6);
     }
 
     inline phase_t prev() const {
-      return phase_t((static_cast<int8_t>(p) - 1) % 7);
+      return phase_t((static_cast<int8_t>(p) - 1) % 6);
     }
     
     inline bool snooping() {

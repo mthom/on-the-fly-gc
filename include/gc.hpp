@@ -4,7 +4,6 @@
 #include <atomic>
 #include <cassert>
 #include <cstdlib>
-#include <iostream>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -531,9 +530,6 @@ namespace otf_gc
 	    }
 	  case phase::phase_t::Sweep:
 	    sweep<Policy>(alloc_color.load(std::memory_order_relaxed).flip());
-	    break;
-
-	  case phase::phase_t::Clearing:
 	    clear_buffers<Tracer>();
 	    break;
 
