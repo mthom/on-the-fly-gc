@@ -74,24 +74,22 @@ namespace otf_gc
     {
     private:
       friend class gc;
-
-      gc& parent;
+      
       bool inactive, snoop, trace_on;
       std::function<list<void*>()> root_callback;
       phase current_phase;
       list<void*> buffer, snooped;
     public:
-      registered_mutator(gc& parent_)
-	: mutator(parent_.alloc_color.load(std::memory_order_relaxed))
-	, parent(parent_)
+      registered_mutator()
+	: mutator(collector->alloc_color.load(std::memory_order_relaxed))
 	, inactive(false)
-	, snoop(parent.gc_phase.load(std::memory_order_relaxed).snooping())
-	, trace_on(parent.gc_phase.load(std::memory_order_relaxed).tracing())
+	, snoop(collector->gc_phase.load(std::memory_order_relaxed).snooping())
+	, trace_on(collector->gc_phase.load(std::memory_order_relaxed).tracing())
 	, root_callback([]() { return nullptr; })
-	, current_phase(parent.gc_phase.load(std::memory_order_relaxed))
+	, current_phase(collector->gc_phase.load(std::memory_order_relaxed))
       {
-	parent.active.fetch_add(1, std::memory_order_relaxed);
-	parent.shook.fetch_add(1, std::memory_order_relaxed);
+	collector->active.fetch_add(1, std::memory_order_relaxed);
+	collector->shook.fetch_add(1, std::memory_order_relaxed);
       }
 
       inline bool tracing() const {
@@ -137,7 +135,7 @@ namespace otf_gc
       inline void poll_for_sync()
       {
 	assert(!inactive);
-	phase gc_phase = parent.gc_phase.load(std::memory_order_relaxed);
+	phase gc_phase = collector->gc_phase.load(std::memory_order_relaxed);
 
 	if(current_phase != gc_phase)
 	{
@@ -147,42 +145,42 @@ namespace otf_gc
 	    list<void*> roots = root_callback();
 
 	    roots.append(std::move(snooped));
-	    roots.atomic_vacate_and_append(parent.root_set);
+	    roots.atomic_vacate_and_append(collector->root_set);
 
 	    for(size_t i = 0; i < impl_details::small_size_classes; ++i)
 	      if(auto small_ul = vacate_small_used_list(i))
-		small_ul.atomic_vacate_and_append(parent.small_used_lists[i]);
+		small_ul.atomic_vacate_and_append(collector->small_used_lists[i]);
 
 	    if(auto large_ul = vacate_large_used_list())
-	      large_ul.atomic_vacate_and_append(parent.large_used_list);
+	      large_ul.atomic_vacate_and_append(collector->large_used_list);
 
-	    alloc_color = parent.alloc_color.load(std::memory_order_relaxed);
+	    alloc_color = collector->alloc_color.load(std::memory_order_relaxed);
 	  } else if(current_phase == phase(phase::phase_t::Fourth_h)) {
-	    parent.buffer_set.push_front(buffer);
+	    collector->buffer_set.push_front(buffer);
 	    buffer.reset();
 	  }
 
 	  snoop = current_phase.snooping();
 	  trace_on = current_phase.tracing();
 
-	  parent.shook.fetch_add(1, std::memory_order_relaxed);
+	  collector->shook.fetch_add(1, std::memory_order_relaxed);
 	}
       }
 
       ~registered_mutator()
       {
-	parent.buffer_set.push_front(buffer);
+	collector->buffer_set.push_front(buffer);
 
 	for(size_t i = 0; i < impl_details::small_size_classes; ++i) {
 	  if(auto fl = fixed_managers[i].release_free_list())
-	    parent.small_free_lists[i].push_front(fl);
+	    collector->small_free_lists[i].push_front(fl);
 
 	  if(auto ul = fixed_managers[i].release_used_list())
-	    ul.atomic_vacate_and_append(parent.small_used_lists[i]);
+	    ul.atomic_vacate_and_append(collector->small_used_lists[i]);
 	}
 
 	if(auto lul = variable_manager.release_used_list())
-	  lul.atomic_vacate_and_append(parent.large_used_list);
+	  lul.atomic_vacate_and_append(collector->large_used_list);
 
 	allocation_dump.append(atomic_list_pool<list<void*>>().reset_allocation_dump());
 	allocation_dump.append(atomic_list_pool<stub_list>().reset_allocation_dump());
@@ -191,14 +189,14 @@ namespace otf_gc
 	allocation_dump.append(list_pool<list<void*>>().reset_allocation_dump());
 	allocation_dump.append(stub_list_pool().reset_allocation_dump());
 
-	allocation_dump.atomic_vacate_and_append(parent.allocation_dump);
+	allocation_dump.atomic_vacate_and_append(collector->allocation_dump);
 
-	std::lock_guard<std::mutex> lk(parent.reg_mut);
+	std::lock_guard<std::mutex> lk(collector->reg_mut);
 
-	parent.active.fetch_sub(!inactive, std::memory_order_relaxed);
+	collector->active.fetch_sub(!inactive, std::memory_order_relaxed);
 
-	if(!inactive && current_phase == parent.gc_phase.load(std::memory_order_relaxed))
-	  parent.shook.fetch_sub(1, std::memory_order_relaxed);
+	if(!inactive && current_phase == collector->gc_phase.load(std::memory_order_relaxed))
+	  collector->shook.fetch_sub(1, std::memory_order_relaxed);
       }
     };
   private:
@@ -292,7 +290,7 @@ namespace otf_gc
     inline std::unique_ptr<registered_mutator> create_mutator()
     {
       std::lock_guard<std::mutex> lk(reg_mut);
-      std::unique_ptr<registered_mutator> mt(std::make_unique<registered_mutator>(*this));
+      std::unique_ptr<registered_mutator> mt(std::make_unique<registered_mutator>());
 
       return mt;
     }
