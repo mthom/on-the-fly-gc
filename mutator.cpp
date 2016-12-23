@@ -75,7 +75,7 @@ namespace otf_gc
 				size_t num_log_ptrs)
   {
     void* blk = aligned_alloc(alignof(impl_details::header_t), sz);
-    variable_manager.push_front_used(blk);
+    large_used_list.push_front(blk);
 
     block_cursor blk_c(blk);
     
@@ -91,13 +91,15 @@ namespace otf_gc
   }
 
   stub_list mutator::vacate_small_used_list(size_t i)
-  {
+  {    
     return fixed_managers[i].release_used_list();
   }
 
   large_block_list mutator::vacate_large_used_list()
   {
-    return variable_manager.release_used_list();
+    auto result = large_used_list;
+    large_used_list.reset();
+    return result;
   }
 
   void* mutator::allocate(int raw_sz,

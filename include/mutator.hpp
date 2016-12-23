@@ -6,7 +6,7 @@
 #include "atomic_list.hpp"
 #include "color.hpp"
 #include "fixed_list_manager.hpp"
-#include "variable_list_manager.hpp"
+#include "large_block_list.hpp"
 
 namespace otf_gc
 {
@@ -14,7 +14,7 @@ namespace otf_gc
   {
   protected:
     std::array<fixed_list_manager, impl_details::small_size_classes> fixed_managers;
-    variable_list_manager variable_manager;
+    large_block_list large_used_list;
     list<void*> allocation_dump;
     color alloc_color;
 

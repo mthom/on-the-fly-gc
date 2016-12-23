@@ -178,9 +178,8 @@ namespace otf_gc
 	  if(auto ul = fixed_managers[i].release_used_list())
 	    ul.atomic_vacate_and_append(collector->small_used_lists[i]);
 	}
-
-	if(auto lul = variable_manager.release_used_list())
-	  lul.atomic_vacate_and_append(collector->large_used_list);
+	
+	large_used_list.atomic_vacate_and_append(collector->large_used_list);
 
 	allocation_dump.append(atomic_list_pool<list<void*>>().reset_allocation_dump());
 	allocation_dump.append(atomic_list_pool<stub_list>().reset_allocation_dump());
