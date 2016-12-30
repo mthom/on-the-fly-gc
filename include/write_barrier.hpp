@@ -11,7 +11,7 @@
 namespace otf_gc
 {
   template <std::unique_ptr<gc::registered_mutator>&(*Alloc)(), class Tracer, class T>
-  class otf_write_barrier_prelude
+  class otf_write_barrier_impl
   {
   protected:
     void prelude(void* parent, T data)
@@ -50,7 +50,7 @@ namespace otf_gc
   class otf_write_barrier {};
   
   template <std::unique_ptr<gc::registered_mutator>&(*Alloc)(), class Tracer, class T>
-  class otf_write_barrier<Alloc, Tracer, T*> : public otf_write_barrier_prelude<Alloc, Tracer, T*>
+  class otf_write_barrier<Alloc, Tracer, T*> : private otf_write_barrier_impl<Alloc, Tracer, T*>
   {
   private:
     T* data;
@@ -102,7 +102,7 @@ namespace otf_gc
   };
 
   template <std::unique_ptr<gc::registered_mutator>&(*Alloc)(), class Tracer, class T>
-  class otf_write_barrier<Alloc, Tracer, std::atomic<T*>> : public otf_write_barrier_prelude<Alloc, Tracer, std::atomic<T*>&>
+  class otf_write_barrier<Alloc, Tracer, std::atomic<T*>> : private otf_write_barrier_impl<Alloc, Tracer, std::atomic<T*>&>
   {
   private:
     std::atomic<T*> data;
