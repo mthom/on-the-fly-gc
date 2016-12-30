@@ -55,6 +55,7 @@ namespace otf_gc
   private:
     T* data;
 
+    using otf_write_barrier_impl<Alloc, Tracer, T*>::prelude;    
   public:
     template <typename... Ts>
     otf_write_barrier(Ts&&... items) : data(std::forward<Ts>(items)...)
@@ -74,7 +75,7 @@ namespace otf_gc
   
     inline void write(void* parent, T* data_)
     {
-      this->prelude(parent, data);
+      prelude(parent, data);
       
       data = data_;
       if(Alloc()->snooping() && data)
@@ -107,6 +108,7 @@ namespace otf_gc
   private:
     std::atomic<T*> data;
 
+    using otf_write_barrier_impl<Alloc, Tracer, std::atomic<T*>&>::prelude;
   public:
     otf_write_barrier(T* data_) : data(data_) {}
 
@@ -122,7 +124,7 @@ namespace otf_gc
 
     inline void store(void* parent, T* val, std::memory_order mem)
     {
-      this->prelude(parent, data);
+      prelude(parent, data);
 
       data.store(val, mem);
       if(Alloc()->snooping() && val) 
@@ -135,7 +137,7 @@ namespace otf_gc
 					std::memory_order success,
 					std::memory_order failure)
     {
-      this->prelude(parent, data);
+      prelude(parent, data);
       
       bool result = data.compare_exchange_strong(expected, desired, success, failure);
       
