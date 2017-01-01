@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstdlib>
+#include <iostream>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -240,11 +241,15 @@ namespace otf_gc
 	}
       }
 
-      large_block_list remaining_large_used = large_used_list.exchange(nullptr, std::memory_order_relaxed);
+      large_block_list remaining_large_used =
+	large_used_list.exchange(nullptr, std::memory_order_relaxed);
+      large_block_list processed_large_used;
 
       while(remaining_large_used) {
 	void* fr = remaining_large_used.front();
+	
 	remaining_large_used.pop_front();
+	processed_large_used.push_back(fr);
 
 	block_cursor blk_c(fr);
 	blk_c.recalculate();
@@ -253,6 +258,8 @@ namespace otf_gc
 
 	Policy::destroy(h, blk_c.header());
       }
+
+      processed_large_used.atomic_vacate_and_append(large_used_list);
     }
 
   public:
@@ -263,7 +270,8 @@ namespace otf_gc
 
       destroy_objects<Policy>();
 
-      list<void*> records = allocation_dump.exchange(nullptr, std::memory_order_relaxed);
+      list<void*> records =
+	allocation_dump.exchange(nullptr, std::memory_order_relaxed);
 
       while(!records.empty()) {
 	void* record = records.front();
@@ -271,7 +279,8 @@ namespace otf_gc
 	free(record);
       }
 
-      large_block_list used_large_records = large_used_list.exchange(nullptr, std::memory_order_relaxed);
+      large_block_list used_large_records =
+	large_used_list.exchange(nullptr, std::memory_order_relaxed);
       
       while(!used_large_records.empty()) {
 	void* record = used_large_records.front();

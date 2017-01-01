@@ -131,22 +131,7 @@ namespace otf_gc
     inline operator bool() const {
       return !empty();
     }
-    /*    
-    void clear()
-    {
-      block_cursor blk_c(head);
 
-      while(!blk_c.null_block()) {
-	blk_c.recalculate();
-
-	for(std::size_t i = 0; i < blk_c.num_log_ptrs(); ++i)
-	  blk_c.log_ptr(i)->~log_ptr_t();
-	
-	blk_c.header()->~header_t();
-	blk_c = *blk_c.next();
-      }
-    }
-    */
     inline bool empty() const
     {
       return head == nullptr;
