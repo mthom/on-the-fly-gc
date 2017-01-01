@@ -294,7 +294,7 @@ namespace otf_gc
       }
     }
 
-    static void initialize()
+    inline static void initialize()
     {
       if(collector == nullptr)
 	collector = std::unique_ptr<gc>(new gc());
