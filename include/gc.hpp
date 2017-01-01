@@ -4,7 +4,6 @@
 #include <atomic>
 #include <cassert>
 #include <cstdlib>
-#include <iostream>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -70,6 +69,19 @@ namespace otf_gc
       return false;
     }
 
+    void dump_thread_local_allocations()
+    {
+      list<void*> result = list_pool<void*>().reset_allocation_dump();
+
+      result.append(list_pool<list<void*>>().reset_allocation_dump());
+      
+      result.append(atomic_list_pool<list<void*>>().reset_allocation_dump());
+      result.append(atomic_list_pool<stub_list>().reset_allocation_dump());
+      
+      result.append(stub_list_pool().reset_allocation_dump());
+
+      result.atomic_vacate_and_append(allocation_dump);
+    }    
   public:
     class registered_mutator : public mutator
     {
@@ -179,17 +191,10 @@ namespace otf_gc
 	  if(auto ul = fixed_managers[i].release_used_list())
 	    ul.atomic_vacate_and_append(collector->small_used_lists[i]);
 	}
+
+	collector->dump_thread_local_allocations();
 	
 	large_used_list.atomic_vacate_and_append(collector->large_used_list);
-
-	allocation_dump.append(atomic_list_pool<list<void*>>().reset_allocation_dump());
-	allocation_dump.append(atomic_list_pool<stub_list>().reset_allocation_dump());
-	
-	allocation_dump.append(list_pool<void*>().reset_allocation_dump());
-	allocation_dump.append(list_pool<list<void*>>().reset_allocation_dump());
-	allocation_dump.append(stub_list_pool().reset_allocation_dump());
-
-	allocation_dump.atomic_vacate_and_append(collector->allocation_dump);
 
 	std::lock_guard<std::mutex> lk(collector->reg_mut);
 
@@ -241,9 +246,9 @@ namespace otf_gc
 	}
       }
 
-      large_block_list remaining_large_used =
-	large_used_list.exchange(nullptr, std::memory_order_relaxed);
       large_block_list processed_large_used;
+      large_block_list remaining_large_used =
+	large_used_list.exchange(nullptr, std::memory_order_relaxed);      
 
       while(remaining_large_used) {
 	void* fr = remaining_large_used.front();
@@ -293,24 +298,17 @@ namespace otf_gc
     {
       if(collector == nullptr)
 	collector = std::unique_ptr<gc>(new gc());
-    }
-
-    inline std::unique_ptr<registered_mutator> create_mutator()
+    }    
+    
+    inline static std::unique_ptr<registered_mutator> create_mutator()
     {
-      std::lock_guard<std::mutex> lk(reg_mut);
-      std::unique_ptr<registered_mutator> mt(std::make_unique<registered_mutator>());
-
-      return mt;
+      std::lock_guard<std::mutex> lk(collector->reg_mut);
+      return std::make_unique<registered_mutator>();
     }
-
+    
     inline void stop()
     {
-      running.store(false, std::memory_order_acq_rel);
-    }
-
-    inline static std::unique_ptr<registered_mutator> get_mutator()
-    {
-      return collector->create_mutator();
+      running.store(false, std::memory_order_relaxed);
     }
 
     template <class Tracer>
@@ -355,9 +353,7 @@ namespace otf_gc
 
       static size_t ticks = 0;
 
-      stub_list remaining_free;
-      stub_list processed_used;
-      stub_list remaining_used;
+      stub_list remaining_free, remaining_used, processed_used;      
 
       for(size_t i = 0; i < impl_details::small_size_classes; ++i)
       {
@@ -473,7 +469,8 @@ namespace otf_gc
 	remaining_free.reset();
       }
 
-      large_block_list remaining_large_used = large_used_list.exchange(nullptr, std::memory_order_relaxed);
+      large_block_list remaining_large_used =
+	large_used_list.exchange(nullptr, std::memory_order_relaxed);
       large_block_list processed_large_used;
 
       while(remaining_large_used)
@@ -544,17 +541,8 @@ namespace otf_gc
 	  }
 	}
       }
-      
-      list<void*> result = list_pool<void*>().reset_allocation_dump();
 
-      result.append(list_pool<list<void*>>().reset_allocation_dump());
-      
-      result.append(atomic_list_pool<list<void*>>().reset_allocation_dump());
-      result.append(atomic_list_pool<stub_list>().reset_allocation_dump());
-      
-      result.append(stub_list_pool().reset_allocation_dump());
-
-      result.atomic_vacate_and_append(allocation_dump);
+      dump_thread_local_allocations();            
     }
   };
 }
